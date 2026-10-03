@@ -1,0 +1,19 @@
+{
+  "name": "front-office-loft",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "html-to-image": "^1.11.13",
+    "lucide": "^1.50.0",
+    "three": "^0.180.0"
+  },
+  "devDependencies": {
+    "vite": "^7.1.5"
+  }
+}

@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#151517" />
+    <style>
+      html, body, #app { width: 100%; height: 100%; margin: 0; background: #121214; }
+      body { overflow: hidden; }
+    </style>
+    <title>Rival Promotion</title>
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="scene" aria-label="Rival promotion headquarters"></canvas>
+
+      <section id="intro" class="intro">
+        <p class="eyebrow">1996</p>
+        <h1 id="intro-heading">Rival<br />Promotion</h1>
+        <p>Build the company that changes the era.</p>
+        <button id="enter-button" type="button">Enter headquarters <span aria-hidden="true">→</span></button>
+        <small><kbd>←</kbd> <kbd>→</kbd> Navigate &nbsp; <kbd>SPACE</kbd> Engage</small>
+      </section>
+
+      <header class="hud" aria-label="Company status">
+        <div class="wordmark"><span id="wordmark-acronym">RP</span><div><b id="wordmark-name">RIVAL PROMOTION</b><small>National Wrestling</small></div></div>
+        <div class="hud-stat"><small>CAPITAL</small><b id="hud-capital">$150K</b></div>
+        <div class="hud-stat"><small>DATE</small><b id="hud-date">MON · JAN 1, 1996</b></div>
+        <button id="email-notification" type="button" aria-label="Open new email"><span>NEW MAIL</span><b id="email-notification-count">0</b></button>
+        <div class="save-actions">
+          <button id="save-game-button" type="button">Save File</button>
+          <button id="load-game-button" type="button">Load File</button>
+          <input id="load-game-input" type="file" accept="application/json,.json" hidden />
+          <button id="new-game-button" type="button">New Game</button>
+        </div>
+      </header>
+
+      <div class="station-readout" aria-live="polite"><small id="station-index">01 / 05</small><strong id="station-name">CALENDAR WALL</strong><span id="station-description">Plan the week ahead</span></div>
+      <div class="nav-hint"><span>MOVE</span><kbd>SPACE</kbd><span>ENGAGE</span></div>
+      <div class="crib-controls" aria-label="Crib navigation">
+        <button type="button" data-crib-move="-1" aria-label="Previous room">←</button>
+        <button type="button" data-crib-move="1" aria-label="Next room">→</button>
+      </div>
+      <div id="toast" class="toast" role="status"></div>
+
+      <section id="panel" class="panel" aria-hidden="true" inert>
+        <nav id="alt-menu-nav" class="alt-menu-nav" aria-label="Main menu">
+          <div class="alt-menu-brand"><small>MAIN MENU</small><b id="alt-menu-heading">RIVAL PROMOTION</b></div>
+          <button type="button" class="alt-menu-item crib" data-alt-crib>← The Crib</button>
+          <ul id="alt-menu-list" class="alt-menu-list"></ul>
+          <div class="alt-menu-system">
+            <button type="button" data-alt-save>Save File</button>
+            <button type="button" data-alt-load>Load File</button>
+            <button type="button" data-alt-new>New Game</button>
+          </div>
+        </nav>
+        <button id="alt-menu-toggle" class="alt-menu-toggle" type="button" aria-label="Collapse menu" aria-expanded="true">←</button>
+        <div class="panel-frame">
+          <header><div><small id="panel-kicker">HEADQUARTERS</small><h2 id="panel-title">Calendar Wall</h2></div><button id="close-panel" type="button" aria-label="Close panel">×</button></header>
+          <div id="panel-content"></div>
+          <footer><kbd>ESC</kbd> RETURN TO HEADQUARTERS</footer>
+        </div>
+      </section>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
