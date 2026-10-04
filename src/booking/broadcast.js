@@ -8,6 +8,7 @@ import { CHAMPIONSHIPS } from '../data/championships.js';
 import { getWrestlerById } from '../data/wrestlers.js';
 import { wrestlerImageUrl } from '../data/wrestlerImages.js';
 import { logoUrl } from '../data/calendar.js';
+import { createPpvPoster } from './ppvPoster.js';
 import worldChampBeltUrl from '../../images/world-champ-belt.png?url';
 import tagBeltUrl from '../../images/tag-belt.png?url';
 
@@ -36,6 +37,7 @@ function buildTimeline(result) {
   const mainEvent = result.matches.at(-1);
   const branding = result.eventBranding ?? {};
   const steps = [
+    { kind: 'poster', ms: 6000, heat: 20 },
     {
       kind: 'cold-open',
       ms: 3000,
@@ -191,6 +193,7 @@ function createOverlay(result) {
     <div class="bc-light-rig" aria-hidden="true">${Array.from({ length: 6 }, (_, index) => `<i style="--beam:${index}"></i>`).join('')}</div>
     <div class="bc-crowd" aria-hidden="true">${Array.from({ length: 54 }, (_, index) => `<i style="--fan:${index}"></i>`).join('')}</div>
     <div class="bc-wrestlers" aria-hidden="true"></div>
+    <img class="bc-ppv-poster" alt="${result.showName.replace(/[&<>"']/g, '')} match card">
     <img class="bc-event-logo" alt="">
     <img class="bc-title-belt" alt="Championship belt">
     <div class="bc-grain" aria-hidden="true"></div>
@@ -293,6 +296,9 @@ export function playBroadcast(result, { onComplete = () => {} } = {}) {
   if (session) return;
 
   const root = createOverlay(result);
+  const poster = createPpvPoster(result, result.eventBranding, getCompanyIdentity().name);
+  const posterImage = root.querySelector('.bc-ppv-poster');
+  posterImage.src = poster.canvas.toDataURL('image/png');
   const steps = buildTimeline(result);
   const lineEl = root.querySelector('.bc-line');
   const voiceEl = root.querySelector('.bc-voice');
@@ -321,6 +327,7 @@ export function playBroadcast(result, { onComplete = () => {} } = {}) {
     clearTimers();
     cancelAnimationFrame(session.raf);
     removeEventListener('keydown', onKey, true);
+    poster.dispose();
     root.classList.add('closing');
     const node = root;
     setTimeout(() => node.remove(), 260);
@@ -362,7 +369,16 @@ export function playBroadcast(result, { onComplete = () => {} } = {}) {
     root.classList.toggle('flash', Boolean(step.flash));
     if (step.flash) setTimeout(() => root.classList.remove('flash'), 420);
 
-    if (step.kind === 'beat') {
+    if (step.kind === 'poster') {
+      hideStage(root);
+      setLower(root, null);
+      poster.ready.then(() => {
+        if (!session || session.root !== root || session.index !== 0) return;
+        posterImage.src = poster.canvas.toDataURL('image/png');
+        session.stepTimer = setTimeout(advance, step.ms / session.speed);
+      });
+      return;
+    } else if (step.kind === 'beat') {
       hideStage(root);
       typeLine(step);
       if (step.lower) setLower(root, step.lower);

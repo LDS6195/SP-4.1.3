@@ -7,6 +7,7 @@ import { getDraftTier, getWrestlerById } from '../data/wrestlers.js';
 import { getMatchType, getStake, getMatchLength } from '../data/matchTypes.js';
 import { getChampionship } from '../data/championships.js';
 import { getCelebrity, getEntrancePackage } from '../data/production.js';
+import { eventBroadcastGuarantee } from '../data/finances.js';
 import { matchParticipantIds, ratingLabel, gradeFor } from './bookingEngine.js';
 
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
@@ -570,7 +571,7 @@ export function simulateShow(show, projection, context = {}) {
   );
   const homeVideo = Math.round(attendance * (projection.revenue.homeVideo / Math.max(projection.attendance, 1)) * (0.75 + rating / 130) * rand(0.84, 1.18));
   const television = Math.max(
-    projection.televisionGuarantee ?? 0,
+    eventBroadcastGuarantee(projection.venue, rating),
     Math.round((projection.venue?.tvReach ?? 0.5) * 168000 * (1 + projection.stage.tvBonus) * clamp(rating / 62, 0.35, 1.8) * rand(0.88, 1.15)),
   );
   const revenue = gate + concessions + merch + homeVideo + television;

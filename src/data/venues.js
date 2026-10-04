@@ -104,7 +104,7 @@ export const venues = [
     baseTicket: 19,
     travel: 18000,
     tvReach: 0.72,
-    unlockLevel: 3,
+    unlockLevel: 5,
     crowdTaste: { brawl: 1.08, technical: 1.28, spectacle: 1.08, hardcore: 0.9 },
     notes: 'A legendary lucha libre cathedral. Masks, speed, and spectacular counters matter more here than imported American hype.',
   },
@@ -140,10 +140,10 @@ export const venues = [
   },
   {
     id: 'garden-annex-newyork',
-    name: 'The Garden Annex',
-    city: 'New York, NY',
+    name: 'FleetCenter',
+    city: 'Boston, MA',
     region: 'northeast',
-    capacity: 18400,
+    capacity: 17565,
     rental: 165000,
     marketHeat: 82,
     prestige: 92,
@@ -151,7 +151,7 @@ export const venues = [
     travel: 14000,
     tvReach: 1.0,
     crowdTaste: { brawl: 1.0, technical: 1.05, spectacle: 1.25, hardcore: 0.9 },
-    notes: 'The most famous room in wrestling. A hot night here makes national news. A dead one does too.',
+    notes: 'Boston\'s new downtown arena. A loud, demanding crowd can turn a major card into a New England landmark night.',
   },
   {
     id: 'peach-state-arena-atlanta',
@@ -227,7 +227,7 @@ export const venues = [
     baseTicket: 19,
     travel: 6400,
     tvReach: 0.54,
-    unlockLevel: 2,
+    unlockLevel: 3,
     crowdTaste: { brawl: 1.04, technical: 1.2, spectacle: 0.98, hardcore: 0.92 },
     notes: 'A traditional wrestling town where holds, pacing, and credibility matter more than fireworks.',
   },
@@ -303,7 +303,7 @@ export const venues = [
     baseTicket: 28,
     travel: 13500,
     tvReach: 0.92,
-    unlockLevel: 3,
+    unlockLevel: 5,
     crowdTaste: { brawl: 0.96, technical: 1.02, spectacle: 1.3, hardcore: 0.9 },
     notes: 'A bright national-market showcase. Star power and presentation sell; a plain card disappears into the nightlife.',
   },
@@ -319,7 +319,7 @@ export const venues = [
     baseTicket: 31,
     travel: 17000,
     tvReach: 1.02,
-    unlockLevel: 3,
+    unlockLevel: 6,
     crowdTaste: { brawl: 1.02, technical: 0.92, spectacle: 1.38, hardcore: 1.0 },
     notes: 'A destination crowd with endless alternatives. A major spectacle wins the weekend; a routine show gets ignored.',
   },
@@ -395,7 +395,7 @@ export const venues = [
     baseTicket: 44,
     travel: 15000,
     tvReach: 1.55,
-    unlockLevel: 4,
+    unlockLevel: 8,
     crowdTaste: { brawl: 1.08, technical: 1.18, spectacle: 1.2, hardcore: 1.0 },
     notes: 'The world\'s most famous wrestling room. A hot night here makes the promotion feel immortal; a cold one follows it forever.',
   },
@@ -482,26 +482,32 @@ export function venueRequiredLevel(venue) {
   if (!venue) return 1;
   if (venue.unlockLevel) return venue.unlockLevel;
   const marketTier = {
-    'lincoln-high-gym-syracuse': 3,
-    'american-legion-hall-buffalo': 3,
+    'lincoln-high-gym-syracuse': 2,
+    'american-legion-hall-buffalo': 2,
     'civic-armory-albany': 3,
-    'arena-mexico-mexico-city': 3,
-    'lone-star-pavilion-dallas': 2,
-    'peach-state-arena-atlanta': 2,
-    'steel-city-gardens-pittsburgh': 2,
-    'bayfront-hall-tampa': 2,
-    'the-coliseum-philadelphia': 3,
-    'lakefront-center-chicago': 3,
-    'garden-annex-newyork': 4,
-    'madison-square-garden-newyork': 4,
-    'estadio-azteca-mexico-city': 4,
-    'sunset-forum-losangeles': 4,
-    'maple-dome-toronto': 4,
+    'lone-star-pavilion-dallas': 4,
+    'peach-state-arena-atlanta': 4,
+    'steel-city-gardens-pittsburgh': 3,
+    'bayfront-hall-tampa': 3,
+    'the-coliseum-philadelphia': 4,
+    'lakefront-center-chicago': 5,
+    'garden-annex-newyork': 7,
+    'sunset-forum-losangeles': 6,
+    'maple-dome-toronto': 7,
+    'national-mall-washington': 8,
+    'rose-bowl-pasadena': 9,
+    'tokyo-dome-tokyo': 9,
+    'stonehenge-salisbury': 9,
+    'great-pyramid-giza': 10,
+    'colosseum-rome': 10,
+    'estadio-azteca-mexico-city': 10,
   };
   if (marketTier[venue.id]) return marketTier[venue.id];
-  if (venue.prestige > 75) return 4;
-  if (venue.prestige > 55) return 3;
-  if (venue.prestige > 35) return 2;
+  if (venue.prestige > 95) return 10;
+  if (venue.prestige > 85) return 9;
+  if (venue.prestige > 75) return 7;
+  if (venue.prestige > 55) return 5;
+  if (venue.prestige > 35) return 3;
   return 1;
 }
 

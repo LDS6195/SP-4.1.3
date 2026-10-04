@@ -33,6 +33,7 @@ import {
   revealPurchasedPackCard, finishPurchasedPackReveal,
 } from './booking/bookingState.js';
 import { playBroadcast, isBroadcastActive } from './booking/broadcast.js';
+import { createPpvPoster } from './booking/ppvPoster.js';
 import { PPV_CALENDAR, logoUrl } from './data/calendar.js';
 import { companyLogoUrl, companyLogoAccent, COMPANY_LOGO_STYLES, COMPANY_LOGO_STYLE_LABELS } from './data/companyLogo.js';
 import { getMatchType, MATCH_TYPES } from './data/matchTypes.js';
@@ -129,6 +130,8 @@ let calendarHeaderSign = null;
 const calendarCells = [];
 let bookingBoardSign = null;
 let bookingPosterMesh = null;
+let bookingPosterAsset = null;
+let bookingPosterSignature = '';
 let ppvLogoDisplay = null;
 let galleryMode = false;
 let galleryExhibit = 0;
@@ -207,74 +210,25 @@ function imageTexture(url, repeatX = 1, repeatY = 1) {
 }
 
 function bookingPosterTexture() {
-  const canvas = document.createElement('canvas');
-  canvas.width = 640;
-  canvas.height = 700;
-  const context = canvas.getContext('2d');
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
   const show = getShow();
-  const event = PPV_CALENDAR.find(entry => entry.id === show.eventId);
   const branding = getState().eventBranding[show.eventId] ?? {};
-  const mainEvent = show.matches.at(-1);
-  const competitors = mainEvent?.teams?.filter(team => team.length).slice(0, 2)
-    .map(team => getWrestlerById(team[0])) ?? [];
-  const assets = [
-    { url: logoUrl(branding.logoId || event?.logoId || 'generated', branding.name || show.name, branding.color || event?.color, branding.logoStyle), x: 132, y: 32, width: 376, height: 132 },
-    ...competitors.map((wrestler, index) => ({
-      url: wrestlerImageUrl(wrestler),
-      x: index === 0 ? 12 : 348,
-      y: 190,
-      width: 280,
-      height: 375,
-      wrestler,
-    })),
-  ].filter(asset => asset.url);
-  const images = new Map();
-
-  const drawCover = (image, x, y, width, height) => {
-    const scale = Math.max(width / image.width, height / image.height);
-    const drawWidth = image.width * scale;
-    const drawHeight = image.height * scale;
-    context.drawImage(image, x + (width - drawWidth) / 2, y + (height - drawHeight) / 2, drawWidth, drawHeight);
-  };
-  const redraw = () => {
-    context.fillStyle = '#171315';
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    context.fillStyle = '#8a1f26';
-    context.fillRect(16, 16, canvas.width - 32, canvas.height - 32);
-    context.fillStyle = '#241d1a';
-    context.fillRect(26, 26, canvas.width - 52, canvas.height - 52);
-    assets.forEach(asset => {
-      const image = images.get(asset.url);
-      if (image) drawCover(image, asset.x, asset.y, asset.width, asset.height);
-    });
-    context.fillStyle = 'rgba(0,0,0,.48)';
-    context.fillRect(26, 565, canvas.width - 52, 92);
-    context.strokeStyle = '#d1ae59';
-    context.lineWidth = 4;
-    context.strokeRect(26, 26, canvas.width - 52, canvas.height - 52);
-    context.fillStyle = '#f1d27d';
-    context.font = '700 24px Georgia, serif';
-    context.textAlign = 'center';
-    context.fillText('MAIN EVENT', canvas.width / 2, 603);
-    context.fillStyle = '#f4ead8';
-    context.font = '700 25px Georgia, serif';
-    const names = competitors.map(wrestler => wrestler?.name ?? 'TBA');
-    context.fillText(names.length === 2 ? `${names[0]} VS ${names[1]}` : 'CARD STILL FORMING', canvas.width / 2, 638);
-    texture.needsUpdate = true;
-  };
-  assets.forEach(asset => {
-    const image = new Image();
-    image.onload = () => { images.set(asset.url, image); redraw(); };
-    image.src = asset.url;
+  bookingPosterAsset?.dispose();
+  const poster = createPpvPoster(show, branding, getCompanyIdentity().name);
+  bookingPosterAsset = poster;
+  const texture = new THREE.CanvasTexture(poster.canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  poster.ready.then(() => {
+    if (bookingPosterAsset === poster) texture.needsUpdate = true;
   });
-  redraw();
   return texture;
 }
 
 function refreshBookingPoster() {
   if (!bookingPosterMesh) return;
+  const show = getShow();
+  const signature = JSON.stringify([show, getState().eventBranding[show.eventId], getCompanyIdentity().name]);
+  if (signature === bookingPosterSignature) return;
+  bookingPosterSignature = signature;
   bookingPosterMesh.material.map?.dispose();
   bookingPosterMesh.material.map = bookingPosterTexture();
   bookingPosterMesh.material.needsUpdate = true;
@@ -1100,6 +1054,13 @@ function makeBookingBoard() {
   box(1.9, 1.18, .04, materials.black, 8.55, 5.55, -6.98);
   ppvLogoDisplay.position.set(8.55, 5.55, -6.94);
   scene.add(ppvLogoDisplay);
+  box(1.25, 1.64, .05, materials.black, tvX, 5.38, -6.99);
+  bookingPosterMesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(1.15, 1.15 * 4 / 3),
+    new THREE.MeshBasicMaterial({ map: bookingPosterTexture(), fog: false, toneMapped: false }),
+  );
+  bookingPosterMesh.position.set(tvX, 5.38, -6.95);
+  scene.add(bookingPosterMesh);
   box(2.7, .08, .18, materials.steel, boardX, 1.35, boardFrontZ - .12);
   box(3.6, .16, 1.15, materials.steel, tvX, 1.25, -7.05);
   box(.16, .85, .9, materials.black, tvX - 1.35, .78, -7.05);
@@ -3082,6 +3043,7 @@ panelContent.addEventListener('submit', event => {
 });
 panelContent.addEventListener('input', event => {
   handleBookingInput(event);
+  if (event.target.dataset?.event || event.target.dataset?.bk === 'show-name') refreshBookingPoster();
   if (event.target.matches('#company-logo-accent')) event.target.dataset.customized = 'true';
   if (event.target.matches('#company-acronym, #company-name, #company-logo-accent')) {
     refreshCompanyLogoPreview();

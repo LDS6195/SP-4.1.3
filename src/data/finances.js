@@ -28,6 +28,14 @@ export function createFinanceState() {
   return { prices: defaultPrices(), goodwill: 65 };
 }
 
+export function eventBroadcastGuarantee(venue, rating) {
+  if (!venue) return 0;
+  const base = venue.capacity <= 1250 ? 65000
+    : venue.capacity <= 3000 ? 85000
+      : venue.capacity <= 6500 ? 105000 : 0;
+  return Math.round(base * clamp((rating - 15) / 20, 0, 1));
+}
+
 export function clampPrice(categoryId, value) {
   const def = getPriceCategory(categoryId);
   if (!def) return value;

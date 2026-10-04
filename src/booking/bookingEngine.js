@@ -12,9 +12,10 @@ import {
   getPromoTier, getStagePackage, getTicketTier, getEntrancePackage, getExtra, getCelebrity,
 } from '../data/production.js';
 import {
-  concessionsPerHead, demandModFromRatio, goodwillDemandMult, merchPriceFactor, ticketPriceRatio,
+  concessionsPerHead, demandModFromRatio, goodwillDemandMult, merchPriceFactor, ticketPriceRatio, eventBroadcastGuarantee,
 } from '../data/finances.js';
 import { gimmickRarity, GIMMICK_FATIGUE, isBasicMatchType } from '../data/cards.js';
+import { marketHypeForVenue, marketDemandMultiplier } from './marketHype.js';
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const average = list => (list.length ? list.reduce((sum, n) => sum + n, 0) / list.length : 0);
@@ -595,7 +596,7 @@ export function projectShow(show, options = {}) {
   const {
     history = [], bankroll = 0, staminaLookup = () => 100, moraleLookup = () => 65,
     titles = {}, showNumber = 1, gmLevel = 1, finances = { prices: {}, goodwill: 65 },
-    teams = [], leadUpLog = [],
+    teams = [], leadUpLog = [], marketHype = null,
   } = options;
 
   const venue = getVenueById(show.venueId);
@@ -684,6 +685,7 @@ export function projectShow(show, options = {}) {
   const ticketRatio = ticketPriceRatio(finances.prices, gmLevel);
   audienceDemand *= promo.demand * goodwillDemandMult(finances.goodwill);
   audienceDemand *= demandModFromRatio(ticketRatio);
+  audienceDemand *= marketDemandMultiplier(marketHype, venue);
   audienceDemand = Math.max(0, Math.round(audienceDemand));
 
   const capacity = venue?.capacity ?? 0;
@@ -734,7 +736,7 @@ export function projectShow(show, options = {}) {
   const concessions = Math.round(attendance * concessionsPerHead(prices));
   const merch = Math.round(attendance * (3.4 + cardStarPower / 14) * merchPriceFactor(prices));
   const tvBase = venue ? venue.tvReach * 168000 : 0;
-  const televisionGuarantee = gmLevel === 1 ? 42000 : gmLevel === 2 ? 26000 : 0;
+  const televisionGuarantee = eventBroadcastGuarantee(venue, rating);
   const television = Math.max(
     televisionGuarantee,
     Math.round(tvBase * (1 + stage.tvBonus) * clamp(rating / 62, 0.35, 1.8)),
@@ -743,7 +745,10 @@ export function projectShow(show, options = {}) {
   const revenue = gate + concessions + merch + homeVideo + television;
   const profit = revenue - totalCost;
   const profitRange = {
-    low: Math.round(revenue * 0.78 - totalCost),
+    low: Math.round((revenue - television) * 0.78 + Math.max(
+      eventBroadcastGuarantee(venue, ratingLow),
+      tvBase * (1 + stage.tvBonus) * clamp(ratingLow / 62, 0.35, 1.8) * 0.88,
+    ) - totalCost),
     high: Math.round(revenue * 1.22 - totalCost),
   };
 
@@ -785,6 +790,8 @@ export function projectShow(show, options = {}) {
     runtimeLimit: SHOW_RUNTIME_MINUTES,
     attendance,
     audienceDemand,
+    marketHype: marketHypeForVenue(marketHype, venue),
+    marketDemandMultiplier: marketDemandMultiplier(marketHype, venue),
     attendanceRange: {
       low: Math.round(attendance * 0.84),
       high: Math.min(capacity, Math.round(attendance * 1.14)),

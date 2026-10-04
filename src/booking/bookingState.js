@@ -41,6 +41,7 @@ import {
   eligibleTemplates, previewText, getStorylineTemplate,
 } from '../data/storylines.js';
 import { RANDOM_EVENT_CARDS } from '../data/randomEvents.js';
+import { createMarketHype, normalizeMarketHype, updateMarketHype } from './marketHype.js';
 
 const STORAGE_KEY = 'rival-promotion-booking-v8';
 const MAX_SAVED_TEAMS = 20;
@@ -261,6 +262,7 @@ const defaultState = () => {
   nwo: { resolved: false, outcome: null, formedShow: null, members: [] },
   career: createCareerState(),
   finances: createFinanceState(),
+  marketHype: createMarketHype(),
   houseShows: [],
   lounge: { owned: [], vinyls: [], nowPlaying: null, displayedPaintings: [] },
   inbox: { readIds: [], dynamic: [] },
@@ -288,9 +290,17 @@ function load() {
     });
     matchSeq = parsed.matchSeq ?? 0;
     const defaults = defaultState();
+    const marketHype = normalizeMarketHype(parsed.marketHype);
+    if (!parsed.marketHype) {
+      [...(parsed.archive ?? parsed.history ?? [])].reverse().forEach(show => {
+        const venue = venues.find(venue => venue.id === show.venueId || venue.name === show.venueName || venue.city === show.city);
+        if (venue) updateMarketHype(marketHype, venue, show);
+      });
+    }
     const loaded = {
       ...defaults,
       ...parsed,
+      marketHype,
       eventBranding: { ...defaults.eventBranding, ...(parsed.eventBranding ?? {}) },
       career: { ...defaults.career, ...(parsed.career ?? {}) },
       titles: { ...defaults.titles, ...(parsed.titles ?? {}) },
@@ -1040,9 +1050,9 @@ export function showDateLabel() {
   });
 }
 
-export function getProjection() {
+export function getProjection(venueId = state.show.venueId) {
   syncBookedTeams();
-  return projectShow(state.show, {
+  return projectShow({ ...state.show, venueId }, {
     history: state.history,
     bankroll: state.bankroll,
     staminaLookup: staminaFor,
@@ -1052,6 +1062,7 @@ export function getProjection() {
     showNumber: state.showNumber,
     gmLevel: getGMLevel(),
     finances: state.finances,
+    marketHype: state.marketHype,
     teams: state.teams,
     leadUpLog: state.leadUp.log,
   });
@@ -2351,6 +2362,9 @@ function runHouseShow(card = null, date = state.date) {
       effects: result.effects, injury: result.injury,
     })),
   };
+  const homeVenue = venues.find(venue => venue.city === state.company.homeCity) ?? venues[0];
+  houseShow.city = homeVenue.city;
+  houseShow.marketGrowth = updateMarketHype(state.marketHype, homeVenue, houseShow, { localOnly: true });
   state.houseShows.unshift(houseShow);
   state.houseShows = state.houseShows.slice(0, 24);
   updateHouseShowCareer(state, houseShow);
@@ -3512,6 +3526,7 @@ export function runShow() {
     ...(completedEvent ?? {}),
     ...(state.eventBranding[state.show.eventId] ?? {}),
   };
+  result.marketGrowth = updateMarketHype(state.marketHype, projection.venue, result);
 
   state.bankroll += result.profit;
   state.finances.goodwill = applyGoodwillDrift(

@@ -28,7 +28,9 @@ import worldChampBeltUrl from '../../images/world-champ-belt.png?url';
 import tagBeltUrl from '../../images/tag-belt.png?url';
 import { wrestlerImageUrl } from '../data/wrestlerImages.js';
 import { companyLogoUrl } from '../data/companyLogo.js';
-import { createElement, Share2, Download, ArrowLeft } from 'lucide';
+import { createElement, Share2, Download, ArrowLeft, Map as MapIcon } from 'lucide';
+import { marketHeatmapHtml } from './marketHeatmap.js';
+import { marketHypeForVenue, hypeTier, MARKET_LOCATIONS } from './marketHype.js';
 
 const view = { name: 'card', slot: null, titleId: null, titleHistoryPage: 0, rosterCandidate: null, resultIndex: 0, resultMatch: 0, storylinePartnerId: null, leadUpActivity: null, leadUpWrestler: null, lockerRoomAllocation: {}, promoWrestler: null, promoPartner: null, houseShow: null, housePick: null, houseCandidate: null, houseResult: null, teamMembers: [], teamName: '', monthlyTrainingIds: [], monthlySpotlightId: null, monthlyPromoPick: null, monthlyGuide: 'training', monthlyPhaseResult: null, packResult: null, packFlipped: [], annualOpened: false };
 const open = new Set();
@@ -226,11 +228,14 @@ function cardViewHtml() {
 
     <div class="bk-body">
       <section class="bk-col">
+        <div class="bk-venue-selection">
         <button class="bk-strip" data-bk="view" data-value="venue">
           <small>VENUE</small>
           <b>${venue ? `${venue.name} — ${venue.city}` : 'Choose a building'}</b>
           <span>${venue ? `${venue.capacity.toLocaleString()} seats · ${compactMoney(venue.rental + venue.travel)} to run` : 'Required'}</span>
         </button>
+        <button type="button" class="bk-heatmap-open" data-bk="view" data-value="heatmap">${createElement(MapIcon, { width: 18, height: 18, 'aria-hidden': 'true' }).outerHTML}<span>Heatmap</span></button>
+        </div>
 
         <div class="bk-section-head">
           <small>THE CARD · ${show.matches.length} MATCHES</small>
@@ -316,6 +321,7 @@ function venueViewHtml() {
 
   return `<div class="bk">
     ${backBar('Choose the market', 'Bigger buildings cost more to run. Every crowd wants something different.')}
+    <div class="bk-venue-map-action"><button type="button" class="bk-heatmap-open" data-bk="view" data-value="heatmap">${createElement(MapIcon, { width: 18, height: 18, 'aria-hidden': 'true' }).outerHTML}<span>Heatmap</span></button></div>
     <div class="bk-grid">
       ${[...venues].sort((a, b) => venueRequiredLevel(a) - venueRequiredLevel(b) || a.capacity - b.capacity).map(v => {
         const recent = history[0]?.venueId === v.id;
@@ -326,6 +332,7 @@ function venueViewHtml() {
           <span class="bk-option-head"><b>${v.city}</b><em>TOUR TIER ${requiredLevel} · ${compactMoney(v.rental + v.travel)}</em></span>
           <span class="bk-option-meta">${v.name} · ${v.capacity.toLocaleString()} seats · $${v.baseTicket} tickets</span>
           <div class="bk-taste">
+            <span style="color:${hypeTier(marketHypeForVenue(booking.getState().marketHype, v)).color}">YOUR HYPE ${marketHypeForVenue(booking.getState().marketHype, v)}/100</span>
             <span>HEAT ${v.marketHeat}</span><span>PRESTIGE ${v.prestige}</span><span>TV ${Math.round(v.tvReach * 100)}%</span>
             ${Object.entries(v.crowdTaste)
               .filter(([, mult]) => mult >= 1.12 || mult <= 0.92)
@@ -2193,6 +2200,7 @@ function bookingViewHtml() {
   if (view.name === 'calendar') return calendarViewHtml();
   if (view.name === 'ppv-customize') return ppvCustomizeViewHtml();
   if (view.name === 'venue') return venueViewHtml();
+  if (view.name === 'heatmap') return `<div class="bk">${backBar('Markets', '')}${marketHeatmapHtml({ hype: booking.getState().marketHype, show: booking.getShow(), gmLevel: booking.getGMLevel(), scope: view.heatmapScope ?? 'usa', selectedCity: view.heatmapCity, projectVenue: venue => booking.getProjection(venue.id) })}</div>`;
   if (view.name === 'promotion') return promotionViewHtml();
   if (view.name === 'match') return matchViewHtml();
   if (view.name === 'roster') return rosterViewHtml();
@@ -2249,6 +2257,10 @@ export function handleBookingEvent(event, { toast = () => {}, onShowRun = () => 
       return true;
     case 'view':
       view.name = value;
+      if (value === 'heatmap') {
+        view.heatmapCity = getVenueById(booking.getShow().venueId)?.city;
+        view.heatmapScope = MARKET_LOCATIONS[view.heatmapCity]?.country === 'USA' ? 'usa' : 'world';
+      }
       if (value === 'leadup') {
         view.leadUpActivity = null;
         view.leadUpWrestler = null;
@@ -2326,8 +2338,18 @@ export function handleBookingEvent(event, { toast = () => {}, onShowRun = () => 
     case 'ppv-generate':
       booking.generateEventLogo(value);
       return true;
+    case 'heatmap-scope':
+      view.heatmapScope = value === 'world' ? 'world' : 'usa';
+      if (view.heatmapScope === 'usa' && MARKET_LOCATIONS[view.heatmapCity]?.country !== 'USA') view.heatmapCity = venues[0].city;
+      return true;
+    case 'heatmap-market':
+      if (MARKET_LOCATIONS[value]) view.heatmapCity = value;
+      return true;
     case 'venue':
-      booking.setShowField('venueId', value);
+      if (!booking.setShowField('venueId', value)) {
+        toast('This venue requires a higher GM level.');
+        return true;
+      }
       view.name = 'card';
       toast(`Booked into ${getVenueById(value)?.city}`);
       return true;

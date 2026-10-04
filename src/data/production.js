@@ -8,9 +8,9 @@
 export const PROMO_TIERS = [
   { id: 'word-of-mouth', name: 'Word of Mouth', cost: 0, demand: 0.78, buzz: -6, risk: 0, description: 'Flyers and the local paper. You are betting purely on the card.' },
   { id: 'local-radio', name: 'Local Radio Spots', cost: 14000, demand: 0.95, buzz: 0, risk: 0, description: 'Drive-time ads in the market. The safe baseline.' },
-  { id: 'regional-tv', name: 'Regional TV Buy', cost: 38000, demand: 1.12, buzz: 6, risk: 1, unlockLevel: 2, description: 'Late-night spots across the territory. Reliable lift.' },
-  { id: 'national-blitz', name: 'National Blitz', cost: 92000, demand: 1.3, buzz: 15, risk: 3, unlockLevel: 3, description: 'Coast-to-coast saturation. Expensive enough to sink a weak card.' },
-  { id: 'media-tour', name: 'Full Media Tour', cost: 155000, demand: 1.46, buzz: 26, risk: 6, unlockLevel: 4, description: 'Talent on morning shows all week. Huge reach, and your stars come in tired.' },
+  { id: 'regional-tv', name: 'Regional TV Buy', cost: 38000, demand: 1.12, buzz: 6, risk: 1, unlockLevel: 3, description: 'Late-night spots across the territory. Reliable lift.' },
+  { id: 'national-blitz', name: 'National Blitz', cost: 92000, demand: 1.3, buzz: 15, risk: 3, unlockLevel: 5, description: 'Coast-to-coast saturation. Expensive enough to sink a weak card.' },
+  { id: 'media-tour', name: 'Full Media Tour', cost: 155000, demand: 1.46, buzz: 26, risk: 6, unlockLevel: 8, description: 'Talent on morning shows all week. Huge reach, and your stars come in tired.' },
 ];
 
 // ---------------------------------------------------------------------------
@@ -19,8 +19,8 @@ export const PROMO_TIERS = [
 export const STAGE_PACKAGES = [
   { id: 'bare', name: 'Bare Bones Staging', cost: 0, presentation: -8, tvBonus: -0.1, description: 'A ring, some lights, a curtain. Looks like an indie show on tape.' },
   { id: 'house', name: 'House Show Rig', cost: 18000, presentation: 0, tvBonus: 0, description: 'Standard entrance ramp and lighting truss.' },
-  { id: 'broadcast', name: 'Broadcast Set', cost: 55000, presentation: 9, tvBonus: 0.12, unlockLevel: 2, description: 'Titantron, hard camera platform, proper lighting design.' },
-  { id: 'flagship', name: 'Flagship Spectacle', cost: 128000, presentation: 20, tvBonus: 0.26, unlockLevel: 4, description: 'Custom stage build, full lighting rig, pyro towers. Looks like the biggest show in wrestling.' },
+  { id: 'broadcast', name: 'Broadcast Set', cost: 55000, presentation: 9, tvBonus: 0.12, unlockLevel: 3, description: 'Titantron, hard camera platform, proper lighting design.' },
+  { id: 'flagship', name: 'Flagship Spectacle', cost: 128000, presentation: 20, tvBonus: 0.26, unlockLevel: 7, description: 'Custom stage build, full lighting rig, pyro towers. Looks like the biggest show in wrestling.' },
 ];
 
 // ---------------------------------------------------------------------------
@@ -40,8 +40,8 @@ export const TICKET_TIERS = [
 export const ENTRANCE_PACKAGES = [
   { id: 'standard', name: 'Standard Walk-Out', cost: 0, presentation: 0, heat: 0, description: 'Music hits, they walk. Nothing wrong with it.' },
   { id: 'spotlight', name: 'Spotlight & Video', cost: 4500, presentation: 5, heat: 2, description: 'Custom video package and a proper light cue.' },
-  { id: 'pyro', name: 'Full Pyro Entrance', cost: 15000, presentation: 12, heat: 5, unlockLevel: 2, description: 'Ramp bursts and a curtain explosion. Instantly feels like a big deal.' },
-  { id: 'production', name: 'Spectacle Entrance', cost: 34000, presentation: 21, heat: 9, unlockLevel: 3, description: 'Set piece, live element, the whole production. Main-event-only money.' },
+  { id: 'pyro', name: 'Full Pyro Entrance', cost: 15000, presentation: 12, heat: 5, unlockLevel: 4, description: 'Ramp bursts and a curtain explosion. Instantly feels like a big deal.' },
+  { id: 'production', name: 'Spectacle Entrance', cost: 34000, presentation: 21, heat: 9, unlockLevel: 6, description: 'Set piece, live element, the whole production. Main-event-only money.' },
 ];
 
 // ---------------------------------------------------------------------------
@@ -50,7 +50,7 @@ export const ENTRANCE_PACKAGES = [
 export const MATCH_EXTRAS = [
   { id: 'ring-crew', name: 'Extra Ring Crew', cost: 2500, presentation: 3, buzz: 0, safety: 6, description: 'More hands on the floor. Meaningfully lowers injury risk in gimmick matches.' },
   { id: 'ring-girls', name: 'Ring Card Girls', cost: 3200, presentation: 4, buzz: 2, safety: 0, description: 'Classic arena polish. Small, cheap presentation lift.' },
-  { id: 'live-band', name: 'Live Entrance Band', cost: 26000, presentation: 11, buzz: 7, safety: 0, unlockLevel: 3, description: 'A band plays them to the ring. Loud, expensive, memorable.' },
+  { id: 'live-band', name: 'Live Entrance Band', cost: 26000, presentation: 11, buzz: 7, safety: 0, unlockLevel: 7, description: 'A band plays them to the ring. Loud, expensive, memorable.' },
   { id: 'vignette', name: 'Pre-Match Vignette', cost: 7500, presentation: 6, buzz: 6, safety: 0, heatGain: 2, description: 'A filmed package selling the story. The cheapest way to make a match matter.' },
   { id: 'confetti', name: 'Post-Match Payoff', cost: 5500, presentation: 5, buzz: 1, safety: 0, description: 'Confetti, streamers, a moment held for the cameras. Only lands if the match delivers.' },
   { id: 'commentary', name: 'Lead Announce Team', cost: 9000, presentation: 8, buzz: 3, safety: 0, unlockLevel: 2, description: 'Put the A-team on this match. Makes good work read as great on tape.' },
