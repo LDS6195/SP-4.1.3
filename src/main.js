@@ -888,22 +888,20 @@ function makeDesk() {
   box(.22, 1.1, 1.55, materials.walnutGrain, -1.62, .55, -2.5);
   box(.22, 1.1, 1.55, materials.walnutGrain, 1.62, .55, -2.5);
   financeDeskItems = createFinanceDeskProps(imageTexture(ticketsUrl));
-  financeDeskItems.position.set(-1, 1.205, -1.94);
+  financeDeskItems.position.set(-1.25, 1.205, -1.94);
   scene.add(financeDeskItems);
 
-  box(1.05, .07, .72, materials.burgundy, 1.18, 1.23, -2.5);
-  box(.88, .06, .58, new THREE.MeshStandardMaterial({ color: 0xc9bda5, roughness: .9 }), 1.18, 1.29, -2.5);
-  box(1.46, .94, .12, materials.black, -.18, 1.9, -2.86);
+  box(1.46, .94, .12, materials.black, .25, 1.9, -2.86);
   const monitorScreen = new THREE.Mesh(
     new THREE.PlaneGeometry(1.3, .74),
     new THREE.MeshBasicMaterial({ map: imageTexture(windows95Url), fog: false, side: THREE.DoubleSide, toneMapped: false }),
   );
-  monitorScreen.position.set(-.18, 1.9, -2.795);
+  monitorScreen.position.set(.25, 1.9, -2.795);
   scene.add(monitorScreen);
-  box(.1, .48, .1, materials.steel, -.18, 1.25, -2.86);
-  box(.72, .07, .3, materials.steel, -.18, 1.17, -2.72);
-  box(1.15, .05, .38, materials.black, -.18, 1.23, -2.47);
-  box(.22, .05, .32, materials.black, .62, 1.23, -2.45);
+  box(.1, .48, .1, materials.steel, .25, 1.25, -2.86);
+  box(.72, .07, .3, materials.steel, .25, 1.17, -2.72);
+  box(1.15, .05, .38, materials.black, .25, 1.23, -2.47);
+  box(.22, .05, .32, materials.black, 1.05, 1.23, -2.45);
 }
 
 function makeCompanyWall() {
@@ -1781,7 +1779,7 @@ makeLights();
 const stations = [
   { name: 'CALENDAR WALL', description: 'Plan your week and protect your energy', position: [-8.65, 3.05, -1.35], lookAt: [-8.65, 3.25, -7], panel: 'calendar' },
   { name: 'FINANCE DESK', description: 'Tickets, cash, pricing, and the company ledger', position: [-1.1, 2.6, -.5], lookAt: [-.8, 1.25, -2.12], panel: 'finances' },
-  { name: 'COMPUTER TERMINAL', description: 'Company intelligence, roster, news, and email', position: [0, 2.25, .2], lookAt: [0, 1.35, -2.5], panel: 'computer' },
+  { name: 'COMPUTER', description: 'Company intelligence, roster, news, and email', position: [.25, 2.25, .2], lookAt: [.25, 1.35, -2.5], panel: 'computer' },
   { name: 'BOOKING BOARD', description: 'Build the first card. You do not choose winners.', position: [8.4, 2.7, -.1], lookAt: [8.8, 3.2, -7], panel: 'booking' },
   { name: 'VHS ARCHIVE', description: 'Every show ever run, in order — pick a tape to relive it', position: [11.3, 2.7, -3.6], lookAt: [12.7, 2.7, -3.6], panel: 'vhsShelf' },
   { name: 'TROPHY GALLERY', description: 'Archive, milestones, and championship history', position: [8.5, 3.6, -.55], lookAt: [9.1, 2.4, 4.55], panel: 'trophies' },
@@ -2109,18 +2107,13 @@ function computerTabHtml() {
     ['news', 'NEWS'],
     ['email', 'EMAIL'],
   ];
-  return `<div class="browser-menu"><button type="button">File</button><button type="button">Edit</button><button type="button">View</button><button type="button">Favorites</button><button type="button">Help</button></div>
-    <div class="browser-toolbar" aria-hidden="true">
-      <span class="browser-tool">←<small>Back</small></span><span class="browser-tool disabled">→<small>Forward</small></span><span class="browser-tool">×<small>Stop</small></span><span class="browser-tool">⌂<small>Home</small></span>
-      <span class="browser-brand">${getCompanyIdentity().acronym}<i>net</i></span>
-    </div>
-    <div class="browser-address"><label>Address</label><span>http://intranet.${getCompanyIdentity().acronym.toLowerCase()}/${terminalTab}.htm</span><b>Go</b></div>
+  return `<div class="browser-address"><span>http://intranet.${getCompanyIdentity().acronym.toLowerCase()}/${terminalTab}.htm</span></div>
     <div class="terminal-tabs">${tabs.map(([key, label]) => `<button class="${terminalTab === key ? 'selected' : ''}" data-tab="${key}"><span aria-hidden="true">${key === 'rankings' ? '◆' : key === 'roster' ? '♟' : key === 'teams' ? '♧' : key === 'stats' ? '▤' : key === 'news' ? '▥' : '✉'}</span>${label}</button>`).join('')}</div>`;
 }
 
 function computerScreenHtml() {
   const legacy = terminalTab === 'email';
-  return `<div class="retro-browser">${computerTabHtml()}<main class="browser-page ${legacy ? 'browser-page--legacy' : 'browser-page--modern'}">${computerBodyHtml()}</main><div class="browser-status"><span>Done</span><span>Local intranet</span></div></div>`;
+  return `<div class="retro-browser">${computerTabHtml()}<main class="browser-page ${legacy ? 'browser-page--legacy' : 'browser-page--modern'}">${computerBodyHtml()}</main></div>`;
 }
 
 function companySentCardHtml() {
@@ -2149,9 +2142,10 @@ function companyReplyScreenHtml() {
           <div><b>Subject</b><span>RE: okay so this is actually happening</span></div>
         </div>
         <div class="email-compose-body">
-          <small>MESSAGE</small>
           <h2>What are we calling this thing?</h2>
           <p>Give the promotion its name and letterhead.</p>
+          <div class="company-identity-editor">
+          <div class="company-identity-controls">
           <div class="email-reply-fields">
             <label><span>Acronym (3 letters)</span><input id="company-acronym" type="text" maxlength="3" autocomplete="off" placeholder="RPW" required /></label>
             <label><span>Company name</span><input id="company-name" type="text" maxlength="40" autocomplete="off" placeholder="Rival Promotion" required /></label>
@@ -2170,20 +2164,22 @@ function companyReplyScreenHtml() {
               <output id="company-logo-accent-value">#C49A46</output>
             </label>
           </div>
+          </div>
           <img id="company-logo-preview" class="company-logo-preview" alt="" hidden />
+          </div>
+          <details class="email-compose-original">
+            <summary>Original message · JAN 02, 1996</summary>
+            <h3>okay so this is actually happening</h3>
+            <p>${originalPrompt}</p>
+            <div><b>From</b><span>${from}</span></div>
+            <div><b>To</b><span>YOU</span></div>
+          </details>
         </div>
         <footer class="email-compose-actions">
           <span>Identity and logo will be set when this reply is sent.</span>
           <button id="company-reply-submit" type="submit">Send reply</button>
         </footer>
       </form>
-      <aside class="email-compose-original">
-        <small>ORIGINAL MESSAGE · JAN 02, 1996</small>
-        <h3>okay so this is actually happening</h3>
-        <p>${originalPrompt}</p>
-        <div><b>From</b><span>${from}</span></div>
-        <div><b>To</b><span>YOU</span></div>
-      </aside>
     </div>
   </section>`;
 }
@@ -2473,7 +2469,7 @@ function resolvePanelContent(kind) {
       const onCalendar = getBookingView() === 'calendar';
       return { title: onCalendar ? 'Calendar Wall' : 'Booking Board', kicker: bookingPanelKicker(), body: bookingPanelHtml() };
     },
-    computer: () => ({ title: `${getCompanyIdentity().acronym} Network Terminal`, kicker: `${getCompanyIdentity().acronym}NET EXPLORER`, body: computerScreenHtml() }),
+    computer: () => ({ title: 'Computer', kicker: `${getCompanyIdentity().acronym}NET EXPLORER`, body: computerScreenHtml() }),
     finances: () => ({ title: 'Finance Office', kicker: 'PRICING STRATEGY', body: financePanelHtml() }),
     wallArt: () => ({ title: 'GM Legacy Art', kicker: 'PURCHASED PAINTINGS', body: wallArtPanelHtml() }),
     booking: () => { if (!panelOpen) setBookingView('card'); return { title: 'Booking Board', kicker: bookingPanelKicker(), body: bookingPanelHtml() }; },
