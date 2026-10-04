@@ -12,7 +12,7 @@ const STATE_REGIONS = {
   south: ['Delaware', 'Florida', 'Georgia', 'Maryland', 'North Carolina', 'South Carolina', 'Virginia', 'West Virginia', 'Alabama', 'Kentucky', 'Mississippi', 'Tennessee', 'Arkansas', 'Louisiana', 'Oklahoma', 'Texas'],
   midwest: ['Illinois', 'Indiana', 'Michigan', 'Ohio', 'Wisconsin', 'Iowa', 'Kansas', 'Minnesota', 'Missouri', 'Nebraska', 'North Dakota', 'South Dakota'],
 };
-const STATE_CODES = { Texas: 'TX', 'New York': 'NY', Pennsylvania: 'PA', Massachusetts: 'MA', Georgia: 'GA', Tennessee: 'TN', Kentucky: 'KY', Missouri: 'MO', Illinois: 'IL', California: 'CA', Florida: 'FL', Nevada: 'NV', 'District of Columbia': 'DC' };
+const STATE_CODES = { Texas: 'TX', Louisiana: 'LA', 'New York': 'NY', Pennsylvania: 'PA', Massachusetts: 'MA', Georgia: 'GA', Tennessee: 'TN', Kentucky: 'KY', Missouri: 'MO', Illinois: 'IL', California: 'CA', Florida: 'FL', Nevada: 'NV', 'District of Columbia': 'DC' };
 const escapeHtml = value => String(value).replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character]));
 const money = value => `${value < 0 ? '-' : ''}$${Math.round(Math.abs(value)).toLocaleString()}`;
 

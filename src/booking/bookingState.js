@@ -7,7 +7,7 @@ import {
   venues, gmExperienceForShow, gmLevelForExperience, experienceRequiredForLevel, venueUnlocked,
 } from '../data/venues.js';
 import { getMatchType } from '../data/matchTypes.js';
-import { CHAMPIONSHIPS, getChampionship, createTitleTable, defenseStatus, titleBookable } from '../data/championships.js';
+import { CHAMPIONSHIPS, getChampionship, createTitleTable, defenseStatus, titleBookable, setChampionshipBrand } from '../data/championships.js';
 import { PPV_CALENDAR, PPV_LOGOS, calendarForShowNumber, createEventBranding, eventDisplayName, ppvDateForShowNumber } from '../data/calendar.js';
 import { MIDCARD_TIERS } from '../data/draft.js';
 import {
@@ -273,6 +273,7 @@ const defaultState = () => {
 };
 
 let state = load();
+setChampionshipBrand(state.company.acronym);
 syncMatchLengths();
 applyRosterSnapshot();
 syncBookedTeams();
@@ -603,6 +604,7 @@ export function setCompanyIdentity({ acronym, name, logoStyle = 'seal', logoAcce
   const cleanLogoStyle = COMPANY_LOGO_STYLES.includes(logoStyle) ? logoStyle : 'seal';
   const cleanLogoAccent = /^#[\da-f]{6}$/i.test(logoAccent ?? '') ? logoAccent : null;
   state.company = { ...state.company, acronym: cleanAcronym, name: cleanName, logoStyle: cleanLogoStyle, logoAccent: cleanLogoAccent, named: true };
+  setChampionshipBrand(cleanAcronym);
   persist();
   return true;
 }

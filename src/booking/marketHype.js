@@ -4,8 +4,8 @@ export const MARKET_LOCATIONS = {
   'Austin, TX': { coordinates: [-97.74, 30.27], country: 'USA', region: 'south' },
   'San Antonio, TX': { coordinates: [-98.49, 29.42], country: 'USA', region: 'south' },
   'Houston, TX': { coordinates: [-95.37, 29.76], country: 'USA', region: 'south' },
-  'Syracuse, NY': { coordinates: [-76.15, 43.05], country: 'USA', region: 'northeast' },
-  'Buffalo, NY': { coordinates: [-78.88, 42.89], country: 'USA', region: 'northeast' },
+  'New Orleans, LA': { coordinates: [-90.07, 29.95], country: 'USA', region: 'south' },
+  'El Paso, TX': { coordinates: [-106.49, 31.76], country: 'USA', region: 'south' },
   'Albany, NY': { coordinates: [-73.76, 42.65], country: 'USA', region: 'northeast' },
   'Philadelphia, PA': { coordinates: [-75.17, 39.95], country: 'USA', region: 'northeast' },
   'Boston, MA': { coordinates: [-71.06, 42.36], country: 'USA', region: 'northeast' },
@@ -50,13 +50,21 @@ export function createMarketHype() {
 export function normalizeMarketHype(saved) {
   const defaults = createMarketHype();
   const scores = values => Object.fromEntries(Object.entries(values ?? {}).map(([key, value]) => [key, clamp(value)]));
-  return {
+  const normalized = {
     markets: scores(saved?.markets ?? defaults.markets),
     regions: scores(saved?.regions ?? defaults.regions),
     countries: scores(saved?.countries ?? defaults.countries),
     global: clamp(saved?.global),
     visits: Object.fromEntries(Object.entries(saved?.visits ?? {}).map(([key, value]) => [key, Math.max(0, Math.floor(Number(value) || 0))])),
   };
+  for (const [previousCity, currentCity] of [['Syracuse, NY', 'New Orleans, LA'], ['Buffalo, NY', 'El Paso, TX']]) {
+    if (!(previousCity in normalized.markets) && !(previousCity in normalized.visits)) continue;
+    normalized.markets[currentCity] = Math.max(normalized.markets[currentCity] ?? 0, normalized.markets[previousCity] ?? 0);
+    normalized.visits[currentCity] = (normalized.visits[currentCity] ?? 0) + (normalized.visits[previousCity] ?? 0);
+    delete normalized.markets[previousCity];
+    delete normalized.visits[previousCity];
+  }
+  return normalized;
 }
 
 export function countryHype(hype, country) {

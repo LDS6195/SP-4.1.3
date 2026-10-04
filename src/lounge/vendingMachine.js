@@ -21,7 +21,7 @@ function labelTexture(lines, background, foreground = '#f4f4ee', wide = false) {
   return texture;
 }
 
-export function createVendingMachine(packs) {
+export function createVendingMachine(packs, companyLogo = null) {
   const machine = new THREE.Group();
   machine.name = 'lounge-pack-vending-machine';
   const shell = new THREE.MeshStandardMaterial({ color: '#244f49', roughness: .4, metalness: .6 });
@@ -50,10 +50,12 @@ export function createVendingMachine(packs) {
   machine.add(marquee);
   const foilGeometry = new THREE.BoxGeometry(.14, .24, .035);
   const foilTrim = new THREE.MeshStandardMaterial({ color: '#dde5e2', metalness: .85, roughness: .3 });
+  const logoMaterial = new THREE.MeshBasicMaterial({ map: companyLogo, transparent: true, depthWrite: false, toneMapped: false });
+  machine.userData.packLogoMaterial = logoMaterial;
   packs.forEach((pack, column) => {
     const material = new THREE.MeshStandardMaterial({ color: pack.color, metalness: .45, roughness: .35 });
     const label = new THREE.MeshBasicMaterial({
-      map: labelTexture(['RIVAL', pack.name.replace(' Pack', '').toUpperCase(), 'TRADING CARDS'], pack.color),
+      map: labelTexture(['', pack.name.replace(' Pack', '').toUpperCase(), 'TRADING CARDS'], pack.color),
       toneMapped: false,
     });
     for (let row = 0; row < 6; row += 1) {
@@ -66,6 +68,10 @@ export function createVendingMachine(packs) {
       const face = new THREE.Mesh(new THREE.PlaneGeometry(.13, .22), label);
       face.position.set(x, y, .501);
       machine.add(face);
+      const logo = new THREE.Mesh(new THREE.PlaneGeometry(.06, .06), logoMaterial);
+      logo.name = 'pack-company-logo';
+      logo.position.set(x, y + .074, .504);
+      machine.add(logo);
       [-.114, .114].forEach(offset => part(.14, .013, .04, foilTrim, x, y + offset, .48));
     }
   });

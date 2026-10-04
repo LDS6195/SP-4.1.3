@@ -7,7 +7,7 @@
 export const CHAMPIONSHIPS = [
   {
     id: 'world',
-    name: 'Rival World Championship',
+    name: 'RP World Title',
     short: 'RP',
     kind: 'singles',
     holders: 1,
@@ -31,6 +31,12 @@ export const CHAMPIONSHIPS = [
 
 export function getChampionship(id) {
   return CHAMPIONSHIPS.find(c => c.id === id) || null;
+}
+
+export function setChampionshipBrand(acronym = 'RP') {
+  const world = getChampionship('world');
+  world.name = `${acronym} World Title`;
+  world.short = acronym;
 }
 
 export function titleBookable(def, show, titleState = null) {

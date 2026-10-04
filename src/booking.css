@@ -160,6 +160,7 @@
 }
 .foil-pack-serrated.bottom { transform: rotate(180deg); }
 .foil-pack-body { display: grid; align-content: center; justify-items: center; gap: 9px; min-height: 306px; padding: 34px 18px 38px; text-align: center; }
+.foil-pack-logo { display: block; width: 72px; height: 72px; object-fit: contain; }
 .foil-pack-body small { color: rgba(255,238,205,.82); font: 600 8.5px 'DM Mono', monospace; letter-spacing: .22em; }
 .foil-pack-body b {
   color: #fff6e2; font: italic 800 31px/.92 'Barlow Condensed', sans-serif; letter-spacing: .02em; text-transform: uppercase;

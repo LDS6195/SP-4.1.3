@@ -635,6 +635,7 @@ function makeSpiralStaircase(x, z, baseY, topY, { radius = .82, steps = 15, turn
 }
 
 let packVendingMachine;
+let packBrandSignature = '';
 let loungeCardBook;
 let financeDeskItems;
 let companyWallEmblem;
@@ -678,7 +679,9 @@ function makeLounge() {
   loungeCardBook = createCardBook();
   loungeCardBook.position.set(centerX + .08, .615, 4.88);
   scene.add(loungeCardBook);
-  packVendingMachine = createVendingMachine(getCribPacks());
+  const packCompany = getCompanyIdentity();
+  packVendingMachine = createVendingMachine(getCribPacks(), imageTexture(companyLogoUrl(packCompany.acronym, packCompany.name, packCompany.logoStyle, packCompany.logoAccent)));
+  packBrandSignature = JSON.stringify(packCompany);
   packVendingMachine.position.set(-5.45, .24, 6.35);
   packVendingMachine.rotation.y = Math.PI;
   scene.add(packVendingMachine);
@@ -856,6 +859,18 @@ function makeDesk() {
   box(.72, .07, .3, materials.steel, .25, 1.17, -2.72);
   box(1.15, .05, .38, materials.black, .25, 1.23, -2.47);
   box(.22, .05, .32, materials.black, 1.05, 1.23, -2.45);
+}
+
+function refreshPackBranding() {
+  if (!packVendingMachine) return;
+  const company = getCompanyIdentity();
+  const signature = JSON.stringify(company);
+  if (signature === packBrandSignature) return;
+  const material = packVendingMachine.userData.packLogoMaterial;
+  material.map?.dispose();
+  material.map = imageTexture(companyLogoUrl(company.acronym, company.name, company.logoStyle, company.logoAccent));
+  material.needsUpdate = true;
+  packBrandSignature = signature;
 }
 
 function makeCompanyWall() {
@@ -2364,6 +2379,7 @@ function refreshWorldSigns() {
   refreshCalendarWall();
   refreshBookingPoster();
   refreshPpvLogo();
+  refreshPackBranding();
   if (!isDraftComplete()) {
     updateSign(bookingBoardSign, ['DRAFT DAY', 'SIGN YOUR ROSTER'], { background: '#261518', border: '#c49a46', accent: '#db3540' });
   } else {
@@ -2381,10 +2397,12 @@ function refreshWorldSigns() {
 // effects — shared by the 3D-hotspot panel (openPanel) and the alt-menu sidebar,
 // so both surfaces render the exact same screens from one source of truth.
 function packProductsHtml() {
+  const company = getCompanyIdentity();
+  const logo = companyLogoUrl(company.acronym, company.name, company.logoStyle, company.logoAccent);
   return getCribPacks().map(pack => {
     const disabled = !pack.affordable || pack.soldOut;
     const status = pack.soldOut ? 'SOLD OUT' : !pack.affordable ? 'NOT ENOUGH CASH' : `$${pack.cost.toLocaleString()}`;
-    const artwork = `<div class="catalog-art catalog-art-pack" style="--pack-color:${pack.color}" aria-hidden="true"><i></i><span><small>RIVAL PROMOTIONS</small><b>${pack.customWrestler ? 'CREATE A WRESTLER' : pack.name.replace(' Pack', '').toUpperCase()}</b><em>TRADING CARDS</em></span></div>`;
+    const artwork = `<div class="catalog-art catalog-art-pack" style="--pack-color:${pack.color}" aria-hidden="true"><i></i><span><img src="${logo}" alt="" /><b>${pack.customWrestler ? 'CREATE A WRESTLER' : pack.name.replace(' Pack', '').toUpperCase()}</b><em>TRADING CARDS</em></span></div>`;
     return `<article class="catalog-item ${pack.soldOut ? 'owned' : ''}">${artwork}<small>${status}</small><b>${pack.name}</b><p>${pack.blurb}</p><button class="catalog-buy" data-pack-buy="${pack.id}" ${disabled ? 'disabled' : ''}>Purchase · $${pack.cost.toLocaleString()}</button></article>`;
   }).join('');
 }

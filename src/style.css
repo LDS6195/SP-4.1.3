@@ -220,6 +220,7 @@ kbd { padding: 2px 4px; border: 1px solid rgba(211,168,78,.65); color: var(--gol
   transform: rotate(7deg);
 }
 .catalog-art-pack > span small { color: rgba(255,246,220,.75); font: 600 5px 'DM Mono', monospace; letter-spacing: .08em; }
+.catalog-art-pack > span img { display: block; width: 26px; height: 26px; object-fit: contain; }
 .catalog-art-pack > span b { color: #fff4dc; font: 700 13px/.9 'Barlow Condensed', sans-serif; text-align: center; }
 .catalog-art-pack > span em { padding: 3px 4px; border: 1px solid rgba(255,245,220,.58); color: #fff4dc; font: 600 5px 'DM Mono', monospace; font-style: normal; }
 .catalog-art-turntable { background: radial-gradient(ellipse at 50% 100%, #65736d, #343d39 62%, #252a27); }

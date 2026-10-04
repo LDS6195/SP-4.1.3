@@ -1962,10 +1962,13 @@ function flipCardInPlace(target, { revealed, total, redrawIndex = null }) {
 }
 
 function sealedPackHtml(action, { kicker, title, count, note }) {
+  const company = booking.getCompanyIdentity();
+  const logo = companyLogoUrl(company.acronym, company.name, company.logoStyle, company.logoAccent);
   return `<div class="pack-sealed">
     <div class="foil-pack" data-bk="${action}" role="button" tabindex="0" aria-label="Tear the pack open">
       <div class="foil-pack-serrated top"></div>
       <div class="foil-pack-body">
+        <img class="foil-pack-logo" src="${logo}" alt="Company logo" />
         <small>${kicker}</small>
         <b>${title}</b>
         <span class="foil-pack-count">${count}</span>
