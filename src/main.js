@@ -2120,9 +2120,9 @@ function activeTrophyExhibits() {
 function updateStation(instant = false) {
   camera.up.set(0, 1, 0);
   const selected = stations[station];
-  targetPosition.set(...selected.position);
-  targetLookAt.set(...selected.lookAt);
-  const displayWidth = selected.panel === 'calendar' ? 2.9
+  targetPosition.set(...(started ? selected.position : [-.35, 3.15, -.2]));
+  targetLookAt.set(...(started ? selected.lookAt : [.8, 2.35, -5.95]));
+  const displayWidth = !started ? 6.8 : selected.panel === 'calendar' ? 2.9
     : ['computer', 'finances'].includes(selected.panel) ? 5
       : selected.panel === 'lounge' ? 13.5
         : selected.name === 'GM LEGACY' ? 3.5 : null;
@@ -2398,7 +2398,7 @@ function computerTabHtml() {
 }
 
 function computerScreenHtml() {
-  const legacy = terminalTab === 'email';
+  const legacy = terminalTab === 'email' || terminalTab === 'teams';
   return `<div class="retro-browser">${computerTabHtml()}<main class="browser-page ${legacy ? 'browser-page--legacy' : 'browser-page--modern'}">${computerBodyHtml()}</main></div>`;
 }
 
@@ -3816,7 +3816,7 @@ renderer.setAnimationLoop(() => {
 
 addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
-  if (!loungeMode && ['GM LEGACY', 'THE LOUNGE'].includes(stations[station].name)) updateStation();
+  if (!started || (!loungeMode && ['GM LEGACY', 'THE LOUNGE'].includes(stations[station].name))) updateStation();
   if (loungeMode) updateLoungeExhibit();
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);

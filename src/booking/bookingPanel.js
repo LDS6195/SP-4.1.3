@@ -1325,7 +1325,7 @@ export function teamsViewHtml({ embedded = false } = {}) {
 
   return `<div class="bk terminal-teams-view">
     ${embedded ? '' : backBar('Tag Teams', '')}
-    <small class="bk-label">${teams.length} SAVED DUOS</small>
+    ${embedded ? `<header class="tag-team-page-header"><h2>Tag Teams</h2><span>${teams.length} saved duos</span></header>` : `<small class="bk-label">${teams.length} SAVED DUOS</small>`}
     <div class="tag-team-list">
       <table class="tag-team-table"><thead><tr><th scope="col">TEAM NAME</th><th scope="col">MEMBERS</th>${recordHeader('w', 'WINS')}${recordHeader('l', 'LOSSES')}</tr></thead><tbody>
       ${teams.length ? teams.map(team => {

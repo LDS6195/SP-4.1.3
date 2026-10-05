@@ -477,7 +477,7 @@
 .calendar-skip-ppv:hover small { color: var(--ink); }
 /* Booking Board — the deep card-building interface. */
 
-.panel-frame:has(.bk) { width: min(1220px, 100%); max-height: 92vh; }
+.panel-frame:has(.bk):where(:not(.pack-break-mode, .computer-screen, .card-book-mode)) { width: min(1220px, 100%); max-height: 92vh; }
 
 .bk { display: grid; gap: 16px; color: var(--paper); font-size: 13px; }
 .bk-card-poster { position: relative; overflow: hidden; padding: 16px; border: 2px solid #a3232d; background: linear-gradient(135deg, #21191a 0%, #171719 42%, #241d18 100%); box-shadow: inset 0 0 0 5px #171719, inset 0 0 0 6px #c49a46, 0 10px 28px rgba(0,0,0,.28); }
@@ -926,6 +926,26 @@
 .computer-screen .browser-page--modern .tag-team-record { color: #f3f3f6; font-size: 14px; }
 .computer-screen .browser-page--modern .tag-team-members { color: #d0d0da; font: 13px/1.5 'Space Grotesk', sans-serif; }
 .computer-screen .browser-page--modern .terminal-teams-view .bk-empty { color: #d0d0da; background: #242429; }
+.computer-screen .browser-page--legacy .terminal-teams-view { max-width: 1100px; margin: 0 auto; color: #202020; font: 13px Tahoma, sans-serif; }
+.computer-screen .browser-page--legacy .tag-team-page-header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 0 0 14px; border: 0; border-bottom: 1px solid #a9a9a9; background: transparent; }
+.computer-screen .browser-page--legacy .tag-team-page-header h2 { margin: 0; color: #000080; font: 700 24px/1.2 Tahoma, sans-serif; letter-spacing: 0; text-transform: none; }
+.computer-screen .browser-page--legacy .tag-team-page-header span { color: #555; font-size: 12px; }
+.computer-screen .browser-page--legacy .tag-team-list { margin-top: 8px; border: 1px solid #a9a9a9; background: #fff; }
+.computer-screen .browser-page--legacy .tag-team-table { color: #202020; font: 13px Tahoma, sans-serif; }
+.computer-screen .browser-page--legacy .tag-team-table th { padding: 10px 12px; border-bottom: 1px solid #a9a9a9; color: #202020; background: #e7e7e7; font: 700 12px Tahoma, sans-serif; }
+.computer-screen .browser-page--legacy .tag-team-table td { border-top-color: #d5d5d5; }
+.computer-screen .browser-page--legacy .tag-team-sort { color: #202020; }
+.computer-screen .browser-page--legacy .tag-team-sort.active, .computer-screen .browser-page--legacy .tag-team-sort:hover { color: #000080; }
+.computer-screen .browser-page--legacy .tag-team-sort:focus-visible { outline-color: #000080; }
+.computer-screen .browser-page--legacy .tag-team-row:nth-child(even) { background: #f1f1f1; }
+.computer-screen .browser-page--legacy .tag-team-row:hover { background: #edf2fa; }
+.computer-screen .browser-page--legacy .tag-team-name input { border: 2px inset #ddd; color: #111; background: #fff; font: 13px Tahoma, sans-serif; }
+.computer-screen .browser-page--legacy .tag-team-name input:focus { outline: 2px solid #000080; background: #fff; }
+.computer-screen .browser-page--legacy .tag-team-name button { border: 2px outset #ddd; color: #000080; background: #c0c0c0; }
+.computer-screen .browser-page--legacy .tag-team-name button:active { border-style: inset; }
+.computer-screen .browser-page--legacy .tag-team-members { color: #333; font: 13px/1.4 Tahoma, sans-serif; }
+.computer-screen .browser-page--legacy .tag-team-record { color: #202020; font: 13px Tahoma, sans-serif; }
+.computer-screen .browser-page--legacy .terminal-teams-view .bk-empty { padding: 30px 12px; border: 0; color: #555; background: #f5f5f5; font: 13px/1.4 Tahoma, sans-serif; text-align: center; }
 .vhs-match-list { margin: 18px 0; border-top: 1px solid #423d37; }
 .vhs-match-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(130px, auto) auto; align-items: baseline; gap: 8px 18px; padding: 14px 0; border-bottom: 1px solid #423d37; }
 .vhs-match-pairing { min-width: 0; color: var(--paper); font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
