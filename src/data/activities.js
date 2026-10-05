@@ -7,7 +7,7 @@ export const BUILDUP_WEEKS = 4;
 // Three phases now. Recruiting is gone — talent arrives through the January pack break,
 // not through a monthly slider. The Promo phase highlights one wrestler for the month.
 export const MONTHLY_PHASES = [
-  { id: 'training', name: 'Training', description: 'Focus on three wrestlers and permanently improve their in-ring attributes.' },
+  { id: 'training', name: 'Training', description: 'Focus on one wrestler each month. Three attributes gain +2-3 each, with a rare +5 breakthrough in those three attributes.' },
   { id: 'storyline', name: 'The Mic', description: 'Choose one wrestler to spotlight in this month’s one-off Promo.' },
   { id: 'family', name: 'Rest / Family', description: 'Recover stamina, keep the family close, and avoid the consequences of neglect.' },
 ];

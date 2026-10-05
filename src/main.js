@@ -2912,6 +2912,7 @@ function openPanel(kind) {
   panelFrame.classList.toggle('trophy-room', TROPHY_ROOM_KINDS.has(kind));
   panelFrame.classList.toggle('career-plaque-mode', kind === 'career');
   panelFrame.classList.toggle('finance-office-mode', kind === 'finances');
+  panelFrame.classList.toggle('monthly-workflow-mode', Boolean(panelContent.querySelector('.monthly-workflow')));
   panelFrame.classList.toggle('computer-screen', kind === 'computer');
   panelFrame.classList.toggle('card-book-mode', kind === 'cardBook');
   panelFrame.classList.toggle('compact-picker', compactPicker);

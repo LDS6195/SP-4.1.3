@@ -2351,26 +2351,32 @@ export function spendLeadUpActivity(activityId, payload = {}) {
   return result;
 }
 
-// One random stat per wrestler: usually +1, sometimes +2, rarely +3, very rarely a +5 breakthrough.
 function rollTrainingGain() {
   const roll = Math.random();
   if (roll < 0.03) return 5;
-  if (roll < 0.10) return 3;
-  if (roll < 0.35) return 2;
-  return 1;
+  return roll < 0.515 ? 2 : 3;
 }
 
 export function runMonthlyTrainingPhase(ids) {
-  if (!Array.isArray(ids) || ids.length !== 3 || new Set(ids).size !== 3) return { ok: false, message: 'Choose exactly three wrestlers.' };
+  if (state.leadUp.planned || state.leadUp.phaseResults?.training) return { ok: false, message: 'Training is already complete this month.' };
+  if (!Array.isArray(ids) || ids.length !== 1) return { ok: false, message: 'Choose exactly one wrestler.' };
+  const wrestler = getSignedRoster().find(candidate => candidate.id === ids[0]);
+  if (!wrestler) return { ok: false, message: 'Choose a wrestler from your signed roster.' };
   const stats = ['strength', 'agility', 'stamina', 'technique', 'charisma', 'toughness'];
-  const results = ids.map(id => {
-    const wrestler = getWrestlerById(id);
-    if (!wrestler) return null;
-    const stat = stats[Math.floor(Math.random() * stats.length)];
-    const gain = rollTrainingGain();
-    wrestler.stats[stat] = Math.min(99, wrestler.stats[stat] + gain);
-    return { name: wrestler.name, gain, stats: [stat], breakthrough: gain === 5 };
-  }).filter(Boolean);
+  const available = stats.filter(stat => wrestler.stats[stat] < 99);
+  if (available.length < 3) return { ok: false, message: 'Choose a wrestler with at least three attributes below 99.' };
+  for (let index = 0; index < 3; index += 1) {
+    const pick = index + Math.floor(Math.random() * (available.length - index));
+    [available[index], available[pick]] = [available[pick], available[index]];
+  }
+  const selected = available.slice(0, 3);
+  const gain = rollTrainingGain();
+  const gains = Object.fromEntries(selected.map(stat => {
+    const actualGain = Math.min(gain, 99 - wrestler.stats[stat]);
+    wrestler.stats[stat] += actualGain;
+    return [stat, actualGain];
+  }));
+  const results = [{ name: wrestler.name, gain, stats: selected, gains, breakthrough: gain === 5 }];
   state.leadUp.phaseResults = { ...state.leadUp.phaseResults, training: results };
   persist();
   return { ok: true, results };

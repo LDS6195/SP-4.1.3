@@ -23,9 +23,11 @@ import { autoBook } from './autoBook.js';
 import * as booking from './bookingState.js';
 import worldChampBeltUrl from '../../images/world-champ-belt.png?url';
 import tagBeltUrl from '../../images/tag-belt.png?url';
+import trainingArtUrl from '../../images/wallpaper/weight.jpg?url';
+import promoArtUrl from '../../images/wallpaper/promo.jpg?url';
 import { wrestlerImageUrl } from '../data/wrestlerImages.js';
 import { companyLogoUrl } from '../data/companyLogo.js';
-import { createElement, Share2, Download, ArrowLeft, Check, RotateCcw, Map as MapIcon } from 'lucide';
+import { createElement, Share2, Download, ArrowLeft, Check, RotateCcw, Dumbbell, Mic, Map as MapIcon } from 'lucide';
 import { marketHeatmapHtml } from './marketHeatmap.js';
 import { marketHypeForVenue, hypeTier, MARKET_LOCATIONS } from './marketHype.js';
 
@@ -1781,8 +1783,6 @@ function leadUpViewHtml() {
   </div>`;
 }
 
-const DUMBBELL_ICON = '<svg viewBox="0 0 24 24" width="30" height="30" fill="currentColor" aria-hidden="true"><rect x="1" y="9" width="3" height="6" rx="1"/><rect x="4" y="5.5" width="4" height="13" rx="1"/><rect x="8" y="10.75" width="8" height="2.5"/><rect x="16" y="5.5" width="4" height="13" rx="1"/><rect x="20" y="9" width="3" height="6" rx="1"/></svg>';
-
 function monthlyPlannerViewHtml() {
   const show = booking.getShow();
   const roster = booking.getSignedRoster();
@@ -1799,8 +1799,8 @@ function monthlyPlannerViewHtml() {
     </div>`;
   }
   const phases = [
-    { id: 'training', icon: DUMBBELL_ICON, name: 'Training', blurb: 'Choose 3 wrestlers to give extra training to develop their skills.', body: `<div class="monthly-training-controls"><small>Choose three wrestlers to develop</small><button type="button" class="bk-chip" data-bk="monthly-training-auto">AUTO SELECT</button></div><div class="monthly-choice-grid">${roster.map(w => `<button class="bk-option talent ${view.monthlyTrainingIds.includes(w.id) ? 'selected' : ''}" data-bk="monthly-trainer" data-value="${w.id}"><span class="bk-option-head"><b>${w.name}</b><em>${view.monthlyTrainingIds.includes(w.id) ? 'ON THE MACHINES' : ''}</em></span><span class="bk-option-meta">STR ${w.stats.strength} · AGI ${w.stats.agility} · TECH ${w.stats.technique} · CHA ${w.stats.charisma} · TGH ${w.stats.toughness}</span></button>`).join('')}</div>` },
-    { id: 'storyline', icon: 'MIC', name: 'Story Promo', blurb: 'Play one eligible Promo card for a booked match, boosting its hype and the spotlight wrestler.', body: micCardHtml() },
+    { id: 'training', icon: createElement(Dumbbell, { width: 30, height: 30, 'aria-hidden': 'true' }).outerHTML, art: trainingArtUrl, name: 'Training', blurb: 'One wrestler this month. Three attributes gain +2-3 each, with a rare breakthrough of +5 each.', body: `<div class="monthly-training-controls"><div><small>MONTHLY DEVELOPMENT</small><h3>Choose your training focus</h3></div><button type="button" class="bk-chip" data-bk="monthly-training-auto">AUTO SELECT</button></div><div class="monthly-choice-grid">${roster.map(w => `<button type="button" class="bk-option talent ${view.monthlyTrainingIds.includes(w.id) ? 'selected' : ''}" data-bk="monthly-trainer" data-value="${w.id}" aria-pressed="${view.monthlyTrainingIds.includes(w.id)}"><span class="bk-option-head"><b>${financeText(w.name)}</b><em>${view.monthlyTrainingIds.includes(w.id) ? 'SELECTED' : ''}</em></span><span class="monthly-talent-stats">${[['strength', 'STR'], ['agility', 'AGI'], ['stamina', 'STA'], ['technique', 'TECH'], ['charisma', 'CHA'], ['toughness', 'TGH']].map(([stat, label]) => `<span><small>${label}</small><b>${w.stats[stat]}</b></span>`).join('')}</span></button>`).join('')}</div>` },
+    { id: 'storyline', icon: createElement(Mic, { width: 30, height: 30, 'aria-hidden': 'true' }).outerHTML, art: promoArtUrl, name: 'Story Promo', blurb: 'Play one eligible Promo card for a booked match, boosting its hype and the spotlight wrestler.', body: micCardHtml() },
   ];
   const activePhase = phases.find(phase => phase.id === view.monthlyGuide) ?? phases[0];
   const result = view.monthlyPhaseResult;
@@ -1808,20 +1808,20 @@ function monthlyPlannerViewHtml() {
   const nextLabel = !result
     ? `RUN ${activePhase.name.toUpperCase()} →`
     : activePhase.id === 'training' ? 'CONTINUE TO STORY PROMO →' : 'FINISH MONTH →';
-  return `<div class="bk monthly-workflow monthly-workflow-${activePhase.id}">
-    <div class="monthly-workflow-hero"><span class="monthly-workflow-icon">${activePhase.icon}</span><div><small>${activePhase.name.toUpperCase()} PHASE</small><h2>${activePhase.name}</h2><p>${activePhase.blurb}</p></div></div>
+  return `<div class="bk monthly-workflow monthly-workflow-${activePhase.id} ${result ? 'monthly-workflow-results' : ''}" style="--monthly-art:url('${activePhase.art}')">
+    <div class="monthly-workflow-hero"><div class="monthly-workflow-topline"><span>${financeText(booking.getCompanyIdentity().name)}</span><span>${financeText(show.name)} · MONTHLY PREP</span></div><div class="monthly-workflow-heading"><span class="monthly-workflow-icon">${activePhase.icon}</span><div><small>${activePhase.name.toUpperCase()} · ${result ? 'RESULTS' : 'SELECTION'}</small><h2>${activePhase.name}</h2><p>${activePhase.blurb}</p></div></div><div class="monthly-workflow-phases" aria-label="Monthly preparation progress"><span class="${activePhase.id === 'training' ? 'active' : 'done'}">01 TRAINING</span><span class="${activePhase.id === 'storyline' ? 'active' : ''}">02 STORY PROMO</span></div></div>
     <div class="monthly-workflow-body">${summary}</div>
     <button class="bk-primary monthly-next" data-bk="monthly-next">${nextLabel}</button>
   </div>`;
 }
 
 function monthlyPhaseSummaryHtml(phase, result) {
-  if (phase === 'training') return `<div class="monthly-result training-result"><small class="bk-label">TRAINING RESULTS</small><h3>The work is in.</h3><div class="monthly-result-list">${result.map(entry => `<article><b>${entry.name}</b><span>+${entry.gain} ${entry.stats.map(stat => stat.toUpperCase()).join(' · ')}${entry.breakthrough ? ' · BREAKTHROUGH!' : ''}</span></article>`).join('')}</div></div>`;
+  if (phase === 'training') return `<div class="monthly-result training-result"><small class="bk-label">SESSION COMPLETE</small><h3>The work is in.</h3><div class="monthly-result-list">${result.map(entry => `<article class="monthly-training-report ${entry.breakthrough ? 'breakthrough' : ''}"><div class="monthly-training-report-head"><b>${financeText(entry.name)}</b><span>${entry.breakthrough ? 'BREAKTHROUGH' : 'TRAINING COMPLETE'}</span></div><dl class="monthly-training-gains">${entry.stats.map(stat => `<div><dt>${stat.toUpperCase()}</dt><dd>+${entry.gains?.[stat] ?? entry.gain}</dd></div>`).join('')}</dl></article>`).join('')}</div></div>`;
   return `<div class="monthly-result promo-result">
     <small class="bk-label">${result.promoCardId ? `${result.rarity} PROMO PLAYED` : 'NO PROMO CARD PLAYED'}</small>
-    <h3>${result.name}</h3>
-    <p class="angle-latest">${result.text}</p>
-    ${result.promoCardId ? `<p>${result.wrestlerName} gained <b>Momentum +${result.momentum}</b> and <b>Popularity +${result.popularity}</b>.</p><p class="monthly-result-flavor">The upcoming match hype is boosted by <b>+${result.matchBuzz}</b>.</p>` : `<p class="monthly-result-flavor">${result.wrestlerName} takes the mic this month without spending a Promo card.</p>`}
+    <h3>${financeText(result.name)}</h3>
+    <p class="angle-latest">${financeText(result.text)}</p>
+    ${result.promoCardId ? `<p class="monthly-promo-wrestler">${financeText(result.wrestlerName)}</p><dl class="monthly-training-gains"><div><dt>MOMENTUM</dt><dd>+${result.momentum}</dd></div><div><dt>POPULARITY</dt><dd>+${result.popularity}</dd></div><div><dt>MATCH HYPE</dt><dd>+${result.matchBuzz}</dd></div></dl>` : `<p class="monthly-result-flavor">${financeText(result.wrestlerName)} takes the mic this month without spending a Promo card.</p>`}
   </div>`;
 }
 
@@ -2485,7 +2485,7 @@ export function handleBookingEvent(event, { toast = () => {}, onShowRun = () => 
       if (view.customPromoMatchId) { toast('Save or cancel your Promo text first.'); return true; }
       if (view.monthlyGuide !== 'storyline') {
         if (!view.monthlyPhaseResult) {
-          if (view.monthlyTrainingIds.length < 3) { toast('Select three wrestlers for Training first.'); return true; }
+          if (view.monthlyTrainingIds.length !== 1) { toast('Select one wrestler for Training first.'); return true; }
           const result = booking.runMonthlyTrainingPhase(view.monthlyTrainingIds);
           if (!result.ok) { toast(result.message); return true; }
           view.monthlyPhaseResult = result.results;
@@ -2520,21 +2520,20 @@ export function handleBookingEvent(event, { toast = () => {}, onShowRun = () => 
       return true;
     }
     case 'monthly-trainer': {
-      if (view.monthlyTrainingIds.includes(value)) view.monthlyTrainingIds = view.monthlyTrainingIds.filter(id => id !== value);
-      else if (view.monthlyTrainingIds.length < 3) view.monthlyTrainingIds = [...view.monthlyTrainingIds, value];
-      else toast('Focus on exactly three wrestlers this month.');
+      view.monthlyTrainingIds = view.monthlyTrainingIds.includes(value) ? [] : [value];
       return true;
     }
     case 'monthly-training-auto': {
       const bookedIds = new Set(booking.getShow().matches.flatMap(matchParticipantIds));
       const stats = ['strength', 'agility', 'stamina', 'technique', 'charisma', 'toughness'];
       view.monthlyTrainingIds = booking.getSignedRoster()
+        .filter(wrestler => stats.filter(stat => wrestler.stats[stat] < 99).length >= 3)
         .map(wrestler => ({
           id: wrestler.id,
           score: stats.reduce((sum, stat) => sum + (wrestler.stats[stat] ?? 50), 0) / stats.length - (bookedIds.has(wrestler.id) ? 3 : 0),
         }))
         .sort((a, b) => a.score - b.score || a.id.localeCompare(b.id))
-        .slice(0, 3)
+        .slice(0, 1)
         .map(entry => entry.id);
       return true;
     }
