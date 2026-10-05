@@ -20,15 +20,16 @@ import { wrestlerImageUrl } from './data/wrestlerImages.js';
 import './style.css';
 import './booking.css';
 import './broadcast.css';
-import { wrestlers, STYLES, getWrestlerById, calculateAge, recordString, momentumLabel, topChemistryPartners, getMatchHistoryFor } from './data/wrestlers.js';
+import { wrestlers, STYLES, getWrestlerById, calculateAge, recordString, momentumLabel, topChemistryPartners } from './data/wrestlers.js';
 import { RECORD_DEFS, TROPHIES } from './data/achievements.js';
 import { bookingPanelHtml, bookingPanelKicker, handleBookingEvent, handleBookingInput, trophyCaseHtml, recordBookHtml, archiveHtml, championshipShrineHtml, careerPlaqueHtml, financePanelHtml, titleDetailViewHtml, teamsViewHtml, setBookingView, getBookingView, cardBookHtml, purchasedPackRevealHtml } from './booking/bookingPanel.js';
 import { exportCareerResume } from './booking/legacyShare.js';
+import { reignDaysHeld } from './booking/bookingPanel.js';
 import {
   getSignedRoster, getState, getShow, getLeadUp, showDateLabel, isDraftComplete, getProjection, staminaFor, moraleFor, startNewGame,
   exportGameData, importGameData, buyLoungeItem, LOUNGE_ITEMS, getGMLevel, getInbox, unreadEmailCount, markEmailRead,
-  getCompanyIdentity, hasNamedCompany, setCompanyIdentity, forceTragedy, getOwnedVinyls, getNowPlayingVinyl, setNowPlayingVinyl, buyVinyl, forceNWO, isChampion,
-  getCribPacks, buyPack, buyCustomWrestlerPack, getPromoHistoryFor, getTutorialPacks, claimTutorialPack, getPurchasedPackReveal,
+  getCompanyIdentity, companyBrandedText, hasNamedCompany, setCompanyIdentity, forceTragedy, getOwnedVinyls, getNowPlayingVinyl, setNowPlayingVinyl, buyVinyl, forceNWO, isChampion,
+  getCribPacks, buyPack, buyCustomWrestlerPack, getWrestlerHistory, getTutorialPacks, claimTutorialPack, getPurchasedPackReveal,
   LOUNGE_PAINTING_IDS, getDisplayedPaintings, setDisplayedPainting,
   revealPurchasedPackCard, finishPurchasedPackReveal,
 } from './booking/bookingState.js';
@@ -36,7 +37,7 @@ import { playBroadcast, isBroadcastActive } from './booking/broadcast.js';
 import { createPpvPoster } from './booking/ppvPoster.js';
 import { PPV_CALENDAR, logoUrl } from './data/calendar.js';
 import { companyLogoUrl, companyLogoAccent, COMPANY_LOGO_STYLES, COMPANY_LOGO_STYLE_LABELS } from './data/companyLogo.js';
-import { getMatchType, MATCH_TYPES } from './data/matchTypes.js';
+import { getMatchType } from './data/matchTypes.js';
 import { CHAMPIONSHIPS } from './data/championships.js';
 import { worldNewsForDate } from './data/worldNews.js';
 import { VINYL_RECORDS, vinylCoverUrl, getVinylRecord } from './data/vinyls.js';
@@ -98,6 +99,7 @@ function applyCompanyBranding() {
   document.querySelector('#wordmark-acronym').textContent = acronym;
   document.querySelector('#wordmark-name').textContent = name.toUpperCase();
   document.querySelector('#alt-menu-heading').textContent = name.toUpperCase();
+  document.querySelector('#scene').setAttribute('aria-label', `${name} headquarters`);
   const words = name.split(/\s+/);
   document.querySelector('#intro-heading').innerHTML = words.length > 1
     ? `${words.slice(0, -1).join(' ')}<br />${words.at(-1)}`
@@ -1768,7 +1770,7 @@ const loungeExhibits = [
   { name: 'CARD BOOK', description: 'Your wrestler, Match, and Promo card collection', position: [-7.47, 1.6, 3.7], lookAt: [-7.47, .69, 4.88], panel: 'cardBook' },
   { name: 'LOUNGE CATALOG', description: 'Browse new furniture, records, and arcade upgrades', position: [-7.55, 2.05, 3.05], lookAt: [-8.19, .7, 4.95], panel: 'loungeCatalog' },
   { itemId: 'vinyl-library', name: 'VINYL LIBRARY', description: 'Browse the collection and set the next record', position: [-9.05, 2.45, 3.35], lookAt: [-12.25, 2.65, 3.35], panel: 'vinylLibrary' },
-  { itemId: 'arcade-cabinet', name: 'RIVAL ARCADE', description: 'A private game corner off the main floor', position: [-6.35, 2.05, 3.5], lookAt: [-3.3, 1.5, 3.5], panel: 'arcadeCabinet' },
+  { itemId: 'arcade-cabinet', get name() { return `${getCompanyIdentity().acronym} ARCADE`; }, description: 'A private game corner off the main floor', position: [-6.35, 2.05, 3.5], lookAt: [-3.3, 1.5, 3.5], panel: 'arcadeCabinet' },
   { paintingSlot: 0, name: 'LEFT PAINTING', description: 'Choose an owned painting for this wall position', position: [.1, 3.45, -5.2], lookAt: [3.98, 3.45, -5.2], panel: 'wallArt' },
   { paintingSlot: 1, name: 'RIGHT PAINTING', description: 'Choose an owned painting for this wall position', position: [.1, 3.45, -.5], lookAt: [3.98, 3.45, -.5], panel: 'wallArt' },
 ];
@@ -1849,7 +1851,8 @@ function showToast(message) {
 
 let terminalTab = 'rankings';
 let statsPage = 'records'; // 'records' | 'belts'
-let statsTypeFilter = 'all'; // 'all' or a MATCH_TYPES id
+let statsTypeFilter = 'all';
+const statsSort = { records: { key: 'wins', dir: 'desc' }, belts: { key: 'worldDays', dir: 'desc' } };
 let selectedEmailId = null;
 let selectedWrestlerId = null;
 let wrestlerDetailTab = 'player';
@@ -2015,8 +2018,7 @@ function wrestlerDetailHtml(id) {
   const w = getWrestlerById(id);
   if (!w) return '<p>Wrestler not found.</p>';
   const partners = topChemistryPartners(id, 3);
-  const history = getMatchHistoryFor(id);
-  const storyHistory = getPromoHistoryFor(id);
+  const history = getWrestlerHistory(id);
   const gold = statsBeltRows().find(row => row.id === id);
   const backLabel = currentPanelKind === 'cardBook' ? 'CARDS' : profileReturn?.label.toUpperCase() ?? { roster: 'ROSTER', rankings: 'RANKINGS', stats: 'STATS' }[terminalTab] ?? 'ROSTER';
   const playerCard = `<p class="card-bio">${w.bio}</p>
@@ -2045,18 +2047,12 @@ function wrestlerDetailHtml(id) {
     <div class="card-chemistry">
       <small class="section-label">Best Dance Partners</small>
       <div class="chemistry-list">${partners.map(p => `<article><b>${p.wrestler.name}</b><span>${p.score}% chemistry</span><small>${p.notes[0] || 'No strong signal either way.'}</small></article>`).join('')}</div>
-    </div>
-    <div class="card-history">
-      <small class="section-label">Match History</small>
-      <div class="history-list">${history.length ? history.map(m => `<article><span class="history-result result-${m.result}">${m.result}</span><div><b>vs. ${m.opponentName}</b><small>${m.event} · ${m.date}</small><p>${m.description}</p></div></article>`).join('') : '<p class="history-empty">No recorded bouts yet.</p>'}</div>
     </div>`;
-  const storyTab = `<section class="profile-promo-history">
-    <header><small class="section-label">ONE-OFF PROMOS · ${storyHistory.length} PLAYED</small><p>Promo cards are single-show stories. Once played, they stay here in the wrestlers’ record.</p></header>
-    ${storyHistory.length ? `<div class="history-list">${storyHistory.map(entry => {
-      const owner = getWrestlerById(entry.spotlightId)?.name ?? w.name;
-      const opponents = entry.opponentIds.map(opponentId => getWrestlerById(opponentId)?.name ?? opponentId).join(' & ') || 'No opponent listed';
-      return `<article class="promo-history-entry"><span class="history-result result-${entry.outcome === 'win' ? 'W' : entry.outcome === 'loss' ? 'L' : 'O'}">${entry.outcome.toUpperCase()}</span><div><b>${entry.promoName}</b><small>${entry.showName} · ${entry.date} · ${entry.matchType} · ${entry.rarity}</small><p>${entry.text}</p><p>Played for ${owner} vs. ${opponents} · match hype +${entry.effects.matchBuzz ?? 0}${entry.matchRating ? ` · rating ${entry.matchRating}` : ''}</p></div></article>`;
-    }).join('')}</div>` : '<p class="history-empty">No Promo cards have been played by this wrestler yet.</p>'}
+  const historyTab = `<section class="profile-match-history">
+    <small class="section-label">MATCH HISTORY · ${history.matches.length} BOUTS</small>
+    ${history.matches.length ? `<div class="history-list">${history.matches.map(match => `<article><span class="history-result result-${match.result}">${match.result}</span><div><b>vs. ${match.opponentName}</b><small>${match.event} · ${match.date} · ${match.type}${match.rating != null ? ` · Rating ${match.rating}` : ''}</small><p>${companyBrandedText(match.description)}</p>${match.promos.map(promo => `<small>${companyBrandedText(promo.promoName)}</small><p>${companyBrandedText(promo.text)}</p>`).join('')}</div></article>`).join('')}</div>` : '<p class="history-empty">No recorded bouts yet.</p>'}
+    ${history.promos.length ? `<small class="section-label spaced">PROMOS</small><div class="history-list">${history.promos.map(promo => `<article><span class="history-result result-O" title="Promo">P</span><div><b>${companyBrandedText(promo.promoName)}</b><small>${promo.showName} · ${promo.date}</small><p>${companyBrandedText(promo.text)}</p></div></article>`).join('')}</div>` : ''}
+    ${history.events.length ? `<small class="section-label spaced">RANDOM EVENTS</small><div class="history-list">${history.events.map(event => `<article><span class="history-result result-O" title="Random event">E</span><div><b>${companyBrandedText(event.title)}</b><small>${event.showName} · ${event.date}</small><p>${companyBrandedText(event.body)}</p>${event.effects?.length ? `<p>${event.effects.map(companyBrandedText).join(' · ')}</p>` : ''}</div></article>`).join('')}</div>` : ''}
   </section>`;
   return `<button class="return-gallery" data-back="roster">← BACK TO ${backLabel}</button>
   <div class="card-detail">
@@ -2068,9 +2064,9 @@ function wrestlerDetailHtml(id) {
     </header>
     <div class="terminal-tabs player-card-tabs" role="tablist">
       <button type="button" role="tab" aria-selected="${wrestlerDetailTab === 'player'}" class="${wrestlerDetailTab === 'player' ? 'selected' : ''}" data-wrestler-profile-tab="player">PLAYER CARD</button>
-      <button type="button" role="tab" aria-selected="${wrestlerDetailTab === 'storylines'}" class="${wrestlerDetailTab === 'storylines' ? 'selected' : ''}" data-wrestler-profile-tab="storylines">STORYLINES <span>${storyHistory.length}</span></button>
+      <button type="button" role="tab" aria-selected="${wrestlerDetailTab === 'history'}" class="${wrestlerDetailTab === 'history' ? 'selected' : ''}" data-wrestler-profile-tab="history">HISTORY <span>${history.matches.length + history.promos.length + history.events.length}</span></button>
     </div>
-    <div class="player-card-tab-content">${wrestlerDetailTab === 'storylines' ? storyTab : playerCard}</div>
+    <div class="player-card-tab-content">${wrestlerDetailTab === 'history' ? historyTab : playerCard}</div>
   </div>`;
 }
 
@@ -2124,7 +2120,7 @@ function companyReplyScreenHtml() {
           <div class="company-identity-controls">
           <div class="email-reply-fields">
             <label><span>Acronym (3 letters)</span><input id="company-acronym" type="text" maxlength="3" autocomplete="off" placeholder="RPW" required /></label>
-            <label><span>Company name</span><input id="company-name" type="text" maxlength="40" autocomplete="off" placeholder="Rival Promotion" required /></label>
+            <label><span>Company name</span><input id="company-name" type="text" maxlength="40" autocomplete="off" placeholder="Your promotion" required /></label>
           </div>
           <div class="company-logo-options">
             <fieldset class="company-logo-presets">
@@ -2183,7 +2179,7 @@ function emailBodyHtml() {
   const emails = getInbox();
   const selected = emails.find(email => email.id === selectedEmailId) ?? emails[0];
   if (!selected) return '<div class="email-empty">NO MESSAGES</div>';
-  const dateLabel = selected.date === 'AFTER SHOW 4' ? `AFTER SHOW ${getState().career.showsRun}` : selected.date;
+  const dateLabel = selected.date;
   const isWelcome = selected.id === 'welcome';
   const isFamilyMail = selected.id.startsWith('family-');
   return `<div class="email-client">
@@ -2201,16 +2197,6 @@ function emailBodyHtml() {
   </div>`;
 }
 
-// All wrestlers who ever appear in a flagship-show match of a given type, across the
-// (capped) show history — used to build the STATS match-type filter dynamically so it
-// never lists a format that has never actually been booked.
-function matchTypesInHistory() {
-  const shows = getState().history ?? [];
-  const ids = new Set();
-  shows.forEach(show => show.matches.forEach(m => ids.add(m.typeId)));
-  return MATCH_TYPES.filter(t => ids.has(t.id));
-}
-
 // A side count of 0 (Battle Royale) or 3+ (triple threat, fatal four-way) means a
 // non-winner reads as a non-decisive "other" outcome rather than a straight loss —
 // matches the W-L-O convention used on the wrestler's own career record.
@@ -2218,8 +2204,9 @@ function statsRecordRows(typeFilter) {
   const shows = getState().history ?? [];
   const rows = new Map();
   shows.forEach(show => show.matches.forEach(match => {
-    if (typeFilter !== 'all' && match.typeId !== typeFilter) return;
     const type = getMatchType(match.typeId);
+    const category = match.typeId === 'battle-royal' ? 'battle-royal' : (type?.slots.perTeam ?? 1) > 1 ? 'tag-team' : 'singles';
+    if (typeFilter !== 'all' && category !== typeFilter) return;
     const sideCount = type?.slots.teams || 0;
     const multiPerson = sideCount === 0 || sideCount >= 3;
     const winnerIds = match.winnerIds ?? [];
@@ -2243,7 +2230,6 @@ function statsRecordRows(typeFilter) {
 // past reigns are matched back to a roster id by name — fine for this small a roster.
 function statsBeltRows() {
   const state = getState();
-  const today = new Date(`${state.date}T12:00:00`);
   const rows = new Map();
   const ensure = id => {
     if (!rows.has(id)) rows.set(id, { id, name: getWrestlerById(id)?.name ?? id, worldReigns: 0, worldDays: 0, tagReigns: 0, tagDays: 0 });
@@ -2254,14 +2240,14 @@ function statsBeltRows() {
     if (!title) return;
     const isTag = def.kind === 'tag';
     if (title.holders?.length && title.since) {
-      const days = Math.max(1, Math.round((today - new Date(`${title.since}T12:00:00`)) / 86400000));
+      const days = reignDaysHeld({ from: title.since, to: 'PRESENT', shows: Math.max(0, state.showNumber - title.sinceShow) }, state.date);
       title.holders.forEach(id => {
         const row = ensure(id);
         if (isTag) { row.tagReigns += 1; row.tagDays += days; } else { row.worldReigns += 1; row.worldDays += days; }
       });
     }
     (title.history ?? []).forEach(reign => {
-      const days = Math.max(1, Math.round((new Date(`${reign.to}T12:00:00`) - new Date(`${reign.from}T12:00:00`)) / 86400000));
+      const days = reignDaysHeld(reign, state.date);
       (reign.holderNames ?? '').split(' & ').forEach(name => {
         const w = wrestlers.find(entry => entry.name === name.trim());
         if (!w) return;
@@ -2274,29 +2260,55 @@ function statsBeltRows() {
     .sort((a, b) => (b.worldDays + b.tagDays) - (a.worldDays + a.tagDays));
 }
 
+function statsColumns() {
+  if (statsPage === 'belts') return [['name', 'WRESTLER'], ['worldReigns', 'WORLD TITLE WINS'], ['worldDays', 'DAYS HELD'], ['tagReigns', 'TAG TITLE WINS'], ['tagDays', 'DAYS HELD']];
+  return statsTypeFilter === 'battle-royal' ? [['name', 'WRESTLER'], ['wins', 'WINS']]
+    : [['name', 'WRESTLER'], ['wins', 'W'], ['losses', 'L'], ['other', 'O'], ['winPct', 'WIN %']];
+}
+
+function sortStatsRows(rows) {
+  const sort = statsSort[statsPage];
+  return [...rows].sort((first, second) => {
+    const comparison = sort.key === 'name' ? first.name.localeCompare(second.name, undefined, { sensitivity: 'base', numeric: true })
+      : (Number(first[sort.key]) || 0) - (Number(second[sort.key]) || 0);
+    return comparison * (sort.dir === 'asc' ? 1 : -1) || first.name.localeCompare(second.name);
+  });
+}
+
+function statsHeaderHtml() {
+  const sort = statsSort[statsPage];
+  return statsColumns().map(([key, label]) => {
+    const active = sort.key === key;
+    return `<th scope="col" aria-sort="${active ? sort.dir === 'asc' ? 'ascending' : 'descending' : 'none'}"><button type="button" class="stats-sort ${active ? 'active' : ''}" data-stats-sort="${key}" title="Sort by ${label.toLowerCase()}">${label}<span aria-hidden="true">${active ? sort.dir === 'asc' ? '&#9650;' : '&#9660;' : '&#8597;'}</span></button></th>`;
+  }).join('');
+}
+
 function statsSectionHtml() {
+  if (!statsColumns().some(([key]) => key === statsSort[statsPage].key)) statsSort[statsPage] = { key: 'wins', dir: 'desc' };
   const pageNav = `<div class="stats-subnav">${[['records', 'RECORDS'], ['belts', 'BELTS']].map(([id, label]) => `<button class="${statsPage === id ? 'selected' : ''}" data-stats-page="${id}">${label}</button>`).join('')}</div>`;
 
   if (statsPage === 'belts') {
-    const rows = statsBeltRows();
+    const rows = sortStatsRows(statsBeltRows());
     return `<div class="stats-screen">
       <header class="stats-head"><small>CHAMPIONSHIP LEDGER</small><b>TITLE HISTORY</b><p>World and tag title reigns across every wrestler who has held gold.</p></header>
       ${pageNav}
-      <div class="stats-table-wrap"><table class="stats-table"><thead><tr><th>WRESTLER</th><th>WORLD TITLE WINS</th><th>DAYS HELD</th><th>TAG TITLE WINS</th><th>DAYS HELD</th></tr></thead><tbody>
+      <div class="stats-table-wrap"><table class="stats-table"><thead><tr>${statsHeaderHtml()}</tr></thead><tbody>
         ${rows.length ? rows.map(row => `<tr><td>${profileLinkHtml(row.id, row.name)}</td><td>${row.worldReigns}</td><td>${row.worldDays}</td><td>${row.tagReigns}</td><td>${row.tagDays}</td></tr>`).join('') : '<tr><td colspan="5">No championships won yet.</td></tr>'}
       </tbody></table></div>
     </div>`;
   }
 
-  const typeOptions = [{ id: 'all', name: 'ALL' }, ...matchTypesInHistory().map(t => ({ id: t.id, name: t.name.toUpperCase() }))];
+  const typeOptions = [{ id: 'all', name: 'ALL' }, { id: 'singles', name: 'SINGLES' }, { id: 'tag-team', name: 'TAG TEAM' }, { id: 'battle-royal', name: 'BATTLE ROYALE' }];
+  if (!typeOptions.some(type => type.id === statsTypeFilter)) statsTypeFilter = 'all';
   const filterNav = `<div class="stats-type-filter">${typeOptions.map(t => `<button class="${statsTypeFilter === t.id ? 'selected' : ''}" data-stats-type="${t.id}">${t.name}</button>`).join('')}</div>`;
-  const rows = statsRecordRows(statsTypeFilter);
+  const rows = sortStatsRows(statsRecordRows(statsTypeFilter));
+  const winsOnly = statsTypeFilter === 'battle-royal';
   return `<div class="stats-screen">
-    <header class="stats-head"><small>PERFORMANCE LEDGER</small><b>WIN-LOSS RECORDS</b><p>Filter by match type to see how a wrestler performs in a specific format.</p></header>
+    <header class="stats-head"><small>PERFORMANCE LEDGER</small><b>${winsOnly ? 'BATTLE ROYALE WINS' : 'WIN-LOSS RECORDS'}</b><p>Filter by match type to see how a wrestler performs in a specific format.</p></header>
     ${pageNav}
     ${filterNav}
-    <div class="stats-table-wrap"><table class="stats-table"><thead><tr><th>WRESTLER</th><th>W</th><th>L</th><th>O</th><th>WIN %</th></tr></thead><tbody>
-      ${rows.length ? rows.map(row => `<tr><td>${profileLinkHtml(row.id, row.name)}</td><td class="stats-good">${row.wins}</td><td class="stats-bad">${row.losses}</td><td>${row.other}</td><td>${row.winPct}%</td></tr>`).join('') : '<tr><td colspan="5">No completed matches yet.</td></tr>'}
+    <div class="stats-table-wrap"><table class="stats-table"><thead><tr>${statsHeaderHtml()}</tr></thead><tbody>
+      ${rows.length ? rows.map(row => `<tr><td>${profileLinkHtml(row.id, row.name)}</td><td class="stats-good">${row.wins}</td>${winsOnly ? '' : `<td class="stats-bad">${row.losses}</td><td>${row.other}</td><td>${row.winPct}%</td>`}</tr>`).join('') : `<tr><td colspan="${winsOnly ? 2 : 5}">No completed matches yet.</td></tr>`}
     </tbody></table></div>
   </div>`;
 }
@@ -2333,7 +2345,7 @@ function computerBodyHtml() {
     let contenderRank = 0;
     const rankingRows = ranked.map(({ w }) => {
       const rank = champions.has(w.id) ? 'Champion' : `#${++contenderRank}`;
-      return `<tr><td>${rank}</td><td>${profileLinkHtml(w.id, w.name)}<small>${w.style}</small></td><td>${recordString(w.record)}</td><td>${momentumLabel(w.momentum)}</td></tr>`;
+      return `<tr><td>${rank}</td><td>${profileLinkHtml(w.id, w.name)}</td><td>${recordString(w.record)}</td><td>${momentumLabel(w.momentum)}</td></tr>`;
     }).join('');
     return `<div class="term-modern computer-list-screen"><header><small>CONTENDER INDEX</small><b>THE TITLE PICTURE</b></header><div class="ranking-table-wrap"><table class="computer-ranking-table"><thead><tr><th>RANK</th><th>WRESTLER</th><th>RECORD</th><th>MOMENTUM</th></tr></thead><tbody>${rankingRows}</tbody></table></div></div>`;
   }
@@ -2517,7 +2529,7 @@ function resolvePanelContent(kind) {
         body: `<div class="terminal-grid">${nowPlayingHtml}<article><small>COLLECTION</small><b>${collected.length} OF ${VINYL_RECORDS.length} SLOTS FILLED</b><p>Buy the rest from the Lounge Catalog.</p></article></div>${shelfHtml}`,
       };
     },
-    arcadeCabinet: () => ({ title: 'Rival Arcade', kicker: 'PRIVATE FLOOR / HIGH SCORE', body: '<div class="terminal-grid"><article><small>CABINET ONLINE</small><b>RIVAL ARCADE</b><p>A dedicated Lounge machine for future arcade games, high scores, and visiting-talent challenges.</p></article></div>' }),
+    arcadeCabinet: () => ({ title: `${getCompanyIdentity().acronym} Arcade`, kicker: 'PRIVATE FLOOR / HIGH SCORE', body: `<div class="terminal-grid"><article><small>CABINET ONLINE</small><b>${getCompanyIdentity().acronym} ARCADE</b><p>A dedicated Lounge machine for future arcade games, high scores, and visiting-talent challenges.</p></article></div>` }),
     archive: () => ({ title: 'The Archive', kicker: 'CLASSIC MATCHES / EVENTS / HALL OF FAME', body: `${archiveHtml()}<button class="return-gallery" data-back="close">← RETURN</button>` }),
     milestones: () => ({ title: 'Trophy Wall', kicker: 'COMPANY ACHIEVEMENTS', body: `${trophyCaseHtml()}<button class="return-gallery" data-back="close">← RETURN</button>` }),
     trophyDetail: () => {
@@ -2555,10 +2567,17 @@ function resolvePanelContent(kind) {
       }
       const fillPercent = entry.capacity ? Math.round((entry.attendance / entry.capacity) * 100) : 0;
       const matchRows = (entry.matches ?? []).map(match => {
-        const participants = match.sideNames?.length ? match.sideNames.join(' vs. ') : (match.participantIds ?? []).map(id => getWrestlerById(id)?.name ?? id).join(' vs. ');
         const winner = Array.isArray(match.winnerNames) ? match.winnerNames.join(' & ') : match.winnerNames;
         const draw = ['draw', 'time-limit draw'].includes(match.outcome);
-        return `<article class="bk-history"><header><b>${match.label}</b><span>${match.typeName}${match.stakeName ? ` · ${match.stakeName}` : ''}</span></header><p>${participants}</p><p>${draw ? 'Result: Draw' : `Winner: ${winner || 'No decisive winner'}`} · Rating ${match.rating}</p></article>`;
+        const sides = match.sideNames?.length ? match.sideNames : (match.participantIds ?? []).map(id => getWrestlerById(id)?.name ?? id);
+        const participants = sides.map((name, index) => {
+          const ids = match.sideNames?.length ? match.sideIds?.[index] ?? [] : [match.participantIds?.[index]];
+          const won = !draw && (name === winner || ids.some(id => match.winnerIds?.includes(id)));
+          return won ? `<strong class="vhs-match-winner">${name}</strong>` : `<span>${name}</span>`;
+        }).join(' <span class="vhs-match-versus">vs.</span> ');
+        const stake = match.stakeName && !/^(non-title bout|none)$/i.test(match.stakeName) ? companyBrandedText(match.stakeName) : '';
+        const matchType = [match.typeName || 'Match', stake].filter(Boolean).join(' · ');
+        return `<article class="vhs-match-row"><div class="vhs-match-pairing">${participants}${draw ? ' <span class="vhs-match-draw">DRAW</span>' : ''}</div><span class="vhs-match-type">${matchType}</span><span class="vhs-match-rating">Rating <b>${match.rating}</b></span></article>`;
       }).join('');
       return {
         title: entry.showName,
@@ -2567,7 +2586,7 @@ function resolvePanelContent(kind) {
           <article><small>SHOW RATING</small><b>${entry.rating} — ${entry.ratingLabel}</b><p>${entry.stars}</p></article>
           <article><small>ATTENDANCE</small><b>${entry.attendance.toLocaleString()} / ${entry.capacity.toLocaleString()}</b><p>${fillPercent}% capacity</p></article>
         </div>
-        <div class="bk-stack">${matchRows}</div>
+        <div class="vhs-match-list">${matchRows}</div>
         <button class="return-gallery" data-back="close">← RETURN</button>`,
       };
     },
@@ -2960,7 +2979,7 @@ loadGameInput.addEventListener('change', event => {
       importGameData(reader.result);
       location.reload();
     } catch {
-      showToast('That file is not a valid Rival Promotion save.');
+      showToast(`That file is not a valid ${getCompanyIdentity().name} save.`);
     }
   };
   reader.readAsText(file);
@@ -2986,6 +3005,7 @@ renderer.domElement.addEventListener('click', event => {
       (event.clientX - bounds.left) / bounds.width * 2 - 1,
       -(event.clientY - bounds.top) / bounds.height * 2 + 1,
     );
+    if (Math.abs(pointer.x) > .8 || Math.abs(pointer.y) > .8) return;
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(pointer, camera);
     const tapeCount = Math.min((getState().archive ?? []).length, vhsTapeSlots.length);
@@ -3028,8 +3048,8 @@ renderer.domElement.addEventListener('click', event => {
       openPanel('packVending');
       return;
     }
+    if (Math.abs(pointer.x) <= .55 && Math.abs(pointer.y) <= .55) activateCurrentArea();
   }
-  activateCurrentArea();
 });
 panelContent.addEventListener('submit', event => {
   if (event.target.id === 'custom-wrestler-form') {
@@ -3051,13 +3071,18 @@ panelContent.addEventListener('submit', event => {
   refreshCompanyWallEmblem();
   onboardingStep = 'read';
   markEmailRead('welcome');
-  markEmailRead('welcome-reply');
-  selectedEmailId = 'welcome-reply';
+  selectedEmailId = 'welcome';
   // Naming the company hands you straight to the pack break; the ceremony drops the
   // player at the calendar wall when it is done.
   setBookingView('calendar');
   openPanel('calendar');
   refreshEmailNotification();
+});
+panelContent.addEventListener('keydown', event => {
+  if (event.key !== 'Enter' || !event.target.matches('[data-team-rename-input]')) return;
+  event.preventDefault();
+  event.stopPropagation();
+  event.target.closest('[data-team-row]')?.querySelector('[data-bk="team-rename"]')?.click();
 });
 panelContent.addEventListener('input', event => {
   handleBookingInput(event);
@@ -3309,6 +3334,15 @@ panelContent.addEventListener('click', event => {
   const statsTypeButton = event.target.closest('[data-stats-type]');
   if (statsTypeButton) {
     statsTypeFilter = statsTypeButton.dataset.statsType;
+    refreshComputerPanel();
+    return;
+  }
+  const statsSortButton = event.target.closest('[data-stats-sort]');
+  if (statsSortButton) {
+    const key = statsSortButton.dataset.statsSort;
+    if (!statsColumns().some(([column]) => column === key)) return;
+    const sort = statsSort[statsPage];
+    statsSort[statsPage] = { key, dir: sort.key === key ? sort.dir === 'asc' ? 'desc' : 'asc' : key === 'name' ? 'asc' : 'desc' };
     refreshComputerPanel();
     return;
   }

@@ -4,7 +4,7 @@
 // Nobody retires on their own. This is pro wrestling — careers end when the promoter
 // ends them, which is a decision the player makes at the January intake.
 
-import { calculateAge } from '../data/wrestlers.js';
+import { calculateAge, getDraftTier } from '../data/wrestlers.js';
 
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 const PHYSICAL_STATS = ['strength', 'agility', 'stamina', 'toughness'];
@@ -23,17 +23,19 @@ function agePhase(age) {
 function peakFor(w) {
   if (w.peak) return w.peak;
   const workEthic = w.hidden?.workEthic ?? 60;
-  const room = 5 + Math.round(workEthic / 7);
+  const room = getDraftTier(w) === 'jobber' ? 3 + Math.round(workEthic / 25) : 5 + Math.round(workEthic / 7);
   w.peak = Object.fromEntries(ALL_STATS.map(stat => [stat, clamp((w.stats[stat] ?? 50) + room, 20, 97)]));
   return w.peak;
 }
 
 function driftStats(w, phase) {
   const peak = peakFor(w);
+  const jobber = getDraftTier(w) === 'jobber';
+  const developmentChance = .35 + clamp(w.hidden?.workEthic ?? 60, 0, 100) / 400;
   const workEthicBoost = ((w.hidden?.workEthic ?? 60) - 50) / 100; // roughly -0.5..0.5
   PHYSICAL_STATS.forEach(stat => {
     let delta = 0;
-    if (phase === 'rising') delta = 1 + Math.random() * 2;
+    if (phase === 'rising') delta = jobber ? Number(Math.random() < developmentChance) : 1 + Math.random() * 2;
     else if (phase === 'prime') delta = Math.random() * 2 - 1;
     else if (phase === 'declining') delta = -(1.5 - workEthicBoost * 2) - Math.random() * 1.5;
     else delta = -(3 - workEthicBoost * 2) - Math.random() * 3;
@@ -43,13 +45,15 @@ function driftStats(w, phase) {
   });
   // Technique and charisma reflect experience, not just the body — they hold up longer.
   const experienceDelta = phase === 'late' ? -1 : phase === 'declining' ? 0 : 1;
-  const nextTechnique = w.stats.technique + experienceDelta + Math.round(Math.random());
+  const nextTechnique = w.stats.technique + (jobber && ['rising', 'prime'].includes(phase)
+    ? Number(Math.random() < developmentChance) : experienceDelta + Math.round(Math.random()));
   w.stats.technique = clamp(
     nextTechnique > w.stats.technique ? Math.min(nextTechnique, Math.max(peak.technique, w.stats.technique)) : nextTechnique,
     15,
     99,
   );
-  const charismaDelta = phase === 'late' ? -1 : Math.round(Math.random());
+  const charismaDelta = phase === 'late' ? -1 : jobber && ['rising', 'prime'].includes(phase)
+    ? Number(Math.random() < developmentChance) : Math.round(Math.random());
   const nextCharisma = w.stats.charisma + charismaDelta;
   w.stats.charisma = clamp(
     charismaDelta > 0 ? Math.min(nextCharisma, Math.max(peak.charisma, w.stats.charisma)) : nextCharisma,

@@ -18,7 +18,7 @@ export const CHAMPIONSHIPS = [
   },
   {
     id: 'tag',
-    name: 'Rival Tag Team Championship',
+    name: 'RP Tag Team Title',
     short: 'TT',
     kind: 'tag',
     holders: 2,
@@ -33,10 +33,18 @@ export function getChampionship(id) {
   return CHAMPIONSHIPS.find(c => c.id === id) || null;
 }
 
+export function titleMatchCompatible(definition, matchType) {
+  if (!definition || !matchType) return false;
+  return definition.kind === 'tag' ? matchType.id === 'tag-team' : (matchType.slots.perTeam ?? 1) === 1;
+}
+
 export function setChampionshipBrand(acronym = 'RP') {
   const world = getChampionship('world');
   world.name = `${acronym} World Title`;
   world.short = acronym;
+  const tag = getChampionship('tag');
+  tag.name = `${acronym} Tag Team Title`;
+  tag.short = acronym;
 }
 
 export function titleBookable(def, show, titleState = null) {

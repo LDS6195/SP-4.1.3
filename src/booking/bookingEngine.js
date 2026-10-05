@@ -7,7 +7,7 @@
 import { getWrestlerById, computeChemistry } from '../data/wrestlers.js';
 import { getVenueById, homeFieldTier } from '../data/venues.js';
 import { getMatchType, getStake, getMatchLength } from '../data/matchTypes.js';
-import { CHAMPIONSHIPS, getChampionship, defenseStatus } from '../data/championships.js';
+import { CHAMPIONSHIPS, getChampionship, defenseStatus, titleMatchCompatible } from '../data/championships.js';
 import {
   getPromoTier, getStagePackage, getTicketTier, getEntrancePackage, getExtra, getCelebrity,
 } from '../data/production.js';
@@ -230,7 +230,8 @@ export function projectMatch(match, context = {}) {
     warnings.push(`${context.championshipBuildup.label}.`);
   }
   if (type.ceiling >= 6 && type.id !== 'submission') {
-    const gimmickSupport = (starPower - 60) / 10 + (isMainEvent ? 2 : 0);
+    const buildup = Math.max(0, (match.promoCardEffect?.matchBuzz ?? 0) + (context.championshipBuildup?.bonus ?? 0));
+    const gimmickSupport = (starPower - 60) / 10 + (isMainEvent ? 2 : 0) + buildup / 5;
     if (gimmickSupport < type.ceiling / 3) {
       const penalty = Math.round(type.ceiling / 2);
       add(`${type.name} without enough heat`, -penalty, 'matchmaking');
@@ -308,6 +309,7 @@ export function projectMatch(match, context = {}) {
   // feud that has been built — the same card on a cold match is a wasted card.
   const rarity = gimmickRarity(type.id);
   const payoff = 1;
+  if (rarity) add(`${rarity.name} match card payoff`, rarity.qualityBonus, 'presentation');
 
   // --- ceiling & variance ---------------------------------------------------
   const ceiling = clamp(
@@ -772,9 +774,10 @@ export function projectShow(show, options = {}) {
 
   // A defence without the champion in it is not a defence.
   const titleBlocked = show.matches.some(match => {
+    if (match.titleId && !titleMatchCompatible(getChampionship(match.titleId), getMatchType(match.typeId))) return true;
     const titleState = match.titleId ? titles[match.titleId] : null;
     if (!titleState || !titleState.holders.length) return false;
-    return !titleState.holders.some(id => matchParticipantIds(match).includes(id));
+    return !titleState.holders.every(id => matchParticipantIds(match).includes(id));
   });
 
   return {

@@ -3,7 +3,7 @@
 // Nothing here simulates anything. The show has already happened — this walks the
 // finished result on a timeline and presents it as a 1996 television broadcast.
 
-import { getCompanyIdentity, titleState } from './bookingState.js';
+import { getCompanyIdentity, companyBrandedText, titleState } from './bookingState.js';
 import { CHAMPIONSHIPS } from '../data/championships.js';
 import { getWrestlerById } from '../data/wrestlers.js';
 import { wrestlerImageUrl } from '../data/wrestlerImages.js';
@@ -12,13 +12,11 @@ import { createPpvPoster } from './ppvPoster.js';
 import worldChampBeltUrl from '../../images/world-champ-belt.png?url';
 import tagBeltUrl from '../../images/tag-belt.png?url';
 
-const ANNOUNCERS = {
-  pbp: 'LANCE VOSS',
-  colour: 'BIG DADDY REX',
-};
-
 const REDUCED_MOTION = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const BELT_IMAGES = { world: worldChampBeltUrl, tag: tagBeltUrl };
+const MATCH_ANIMATION_MS = 5000;
+const MATCH_RESULT_HOLD_MS = 2200;
+const ANNOUNCERS = { pbp: 'LANCE VOSS', colour: 'BIG DADDY REX' };
 
 let session = null;
 
@@ -29,8 +27,34 @@ export function isBroadcastActive() {
 // ---------------------------------------------------------------------------
 // Timeline
 // ---------------------------------------------------------------------------
-function beatDuration(text, floor = 1500) {
-  return Math.min(5200, Math.max(floor, 850 + text.length * 27));
+function matchResultText(match) {
+  if (match.outcome === 'draw' || match.outcome === 'time-limit draw') return `${match.sideNames.join(' and ')} fought to a draw in ${match.time}.`;
+  const verbs = {
+    pinfall: 'pinned', submission: 'submitted', knockout: 'knocked out',
+    escape: 'escaped ahead of', retrieval: 'out-climbed', casket: 'closed the casket on', elimination: 'last eliminated',
+  };
+  const method = match.outcome === 'count-out' ? ' by count-out' : match.outcome === 'disqualification' ? ' by disqualification' : '';
+  return `${match.winnerNames} ${verbs[match.outcome] ?? 'defeated'} ${match.loserNames}${method} in ${match.time}.`;
+}
+
+function matchMeterState(match, progress) {
+  const fraction = Math.max(0, Math.min(1, progress));
+  const finalHype = Math.max(0, Math.min(100, match.buzz ?? match.rating ?? 0));
+  const heats = [Math.min(20, finalHype), ...(match.beats ?? []).filter(beat => !beat.isFinish).flatMap(beat => {
+    const heat = Math.max(0, Math.min(100, beat.heat ?? finalHype));
+    return [heat, heat * .65];
+  }), finalHype];
+  const position = fraction * (heats.length - 1);
+  const index = Math.min(heats.length - 2, Math.floor(position));
+  const hype = heats[index] + (heats[index + 1] - heats[index]) * (position - index);
+  const draw = !match.winnerIds?.length || match.outcome === 'draw' || match.outcome === 'time-limit draw';
+  const winnerOnLeft = match.sideIds?.[0]?.some(id => (match.winnerIds ?? []).includes(id));
+  const finish = draw ? 50 : winnerOnLeft ? 5 : 95;
+  const swings = [50, 18, 79, 28, 86, 35, 68, finish];
+  const swingPosition = fraction * (swings.length - 1);
+  const swingIndex = Math.min(swings.length - 2, Math.floor(swingPosition));
+  const blend = (swingPosition - swingIndex) ** 2 * (3 - 2 * (swingPosition - swingIndex));
+  return { hype: Math.max(0, Math.min(100, hype)), advantage: swings[swingIndex] + (swings[swingIndex + 1] - swings[swingIndex]) * blend };
 }
 
 function buildTimeline(result) {
@@ -61,70 +85,11 @@ function buildTimeline(result) {
   result.matches.forEach((match, index) => {
     const isMain = index === result.matches.length - 1;
     steps.push({
-      kind: 'card',
-      ms: 2700,
+      kind: 'match',
+      ms: MATCH_ANIMATION_MS + MATCH_RESULT_HOLD_MS,
       heat: 40,
       match,
       portraitIds: match.participantIds,
-      lower: {
-        slot: match.label + (match.titleId ? ' / CHAMPIONSHIP' : ''),
-        title: match.sideNames.join('   vs.   '),
-        meta: `${match.typeName}${match.stakeId !== 'none' ? ` / ${match.stakeName}` : ''}`,
-      },
-    });
-
-    if (match.titleId) {
-      const previousHolders = match.titleOutcome?.previousHolders ?? [];
-      const holderNames = previousHolders.map(id => getWrestlerById(id)?.name ?? id).join(' & ');
-      steps.push({
-        kind: 'title-intro',
-        ms: 3000,
-        heat: 76,
-        eyebrow: 'OFFICIAL CHAMPIONSHIP INTRODUCTIONS',
-        headline: match.titleOutcome?.titleName ?? match.stakeName,
-        sub: previousHolders.length ? `CHAMPION${previousHolders.length > 1 ? 'S' : ''}: ${holderNames}` : 'VACANT TITLE / A NEW CHAMPION WILL BE CROWNED',
-        portraitIds: match.participantIds,
-        belt: BELT_IMAGES[match.titleId] ?? '',
-      });
-    }
-
-    match.sideNames.forEach((name, side) => {
-      const entrance = match.entrances?.[side] ?? 'Standard Walk-Out';
-      const big = /pyro|spectacle/i.test(entrance);
-      steps.push({
-        kind: 'entrance',
-        ms: big ? 1900 : 1300,
-        heat: big ? 72 : 48,
-        flash: big,
-        portraitIds: match.sideIds?.[side] ?? [match.participantIds[side]].filter(Boolean),
-        lower: { slot: 'NOW ENTERING', title: name, meta: entrance },
-      });
-    });
-
-    match.beats.forEach(beat => {
-      steps.push({
-        kind: 'beat',
-        ms: beatDuration(beat.text, beat.isFinish ? 2600 : 1700),
-        heat: beat.heat,
-        voice: beat.voice,
-        text: beat.text,
-        emphasis: beat.isFinish,
-        portraitIds: match.participantIds,
-        lower: beat.isFinish
-          ? { slot: 'DECISION', title: match.winnerNames ?? 'DRAW', meta: `${match.outcome.toUpperCase()} / ${match.time}` }
-          : null,
-      });
-    });
-
-    steps.push({
-      kind: 'stars',
-      ms: 2400,
-      heat: Math.max(40, match.rating),
-      match,
-      portraitIds: match.participantIds,
-      eyebrow: 'MATCH RATING',
-      headline: match.stars || 'DUD',
-      sub: `${match.grade} / ${match.rating} / 100`,
     });
 
     if (match.titleOutcome && ['change', 'crowned'].includes(match.titleOutcome.type)) {
@@ -134,7 +99,7 @@ function buildTimeline(result) {
         heat: 100,
         eyebrow: match.titleOutcome.type === 'crowned' ? 'A CHAMPION IS CROWNED' : 'NEW CHAMPION',
         headline: match.titleOutcome.newHolderNames,
-        sub: match.titleOutcome.titleName,
+        sub: companyBrandedText(match.titleOutcome.titleName),
         portraitIds: match.winnerIds,
         belt: BELT_IMAGES[match.titleId] ?? '',
         titleOutcome: match.titleOutcome,
@@ -209,6 +174,22 @@ function createOverlay(result) {
       <b class="bc-headline"></b>
       <span class="bc-sub"></span>
     </div>
+    <section class="bc-match" aria-label="Match presentation">
+      <header class="bc-match-heading"><small class="bc-match-slot"></small><b class="bc-match-names"></b><span class="bc-match-meta"></span></header>
+      <div class="bc-match-meter">
+        <div class="bc-match-meter-heading"><span>AUDIENCE HYPE</span><output class="bc-match-hype-value"></output></div>
+        <div class="bc-match-hype-track" role="progressbar" aria-label="Audience hype" aria-valuemin="0" aria-valuemax="100"><i></i></div>
+      </div>
+      <div class="bc-match-meter">
+        <div class="bc-match-meter-heading"><span>MATCH ADVANTAGE</span><output class="bc-match-leader"></output></div>
+        <div class="bc-match-advantage-track" role="meter" aria-label="Match advantage" aria-valuemin="0" aria-valuemax="100"><i class="bc-match-advantage-center"></i><i class="bc-match-advantage-marker"></i></div>
+        <div class="bc-match-sides"><span class="bc-match-side-left"></span><span class="bc-match-side-right"></span></div>
+      </div>
+      <div class="bc-match-result" aria-live="polite">
+        <div><p class="bc-match-decision"></p><small class="bc-match-finish"></small></div>
+        <div class="bc-match-score"><small>MATCH SCORE</small><b></b><span></span><em></em></div>
+      </div>
+    </section>
     <div class="bc-lower">
       <div class="bc-lower-card">
         <span class="bc-lower-slot"></span>
@@ -248,16 +229,21 @@ function hideStage(root) {
 
 // Belts follow the show as it happens: a wrestler only wears gold they held at that
 // point in the broadcast, not the titles they walk out of tonight with.
-function setWrestlers(root, ids = [], holders = {}) {
+function setWrestlers(root, ids = [], holders = {}, winnerIds = []) {
   const frame = root.querySelector('.bc-wrestlers');
-  const uniqueIds = [...new Set(ids.filter(Boolean))].slice(0, 4);
+  const winners = new Set(winnerIds);
+  const participants = [...new Set(ids.filter(Boolean))];
+  const visibleIds = participants.slice(0, 4);
+  const uniqueIds = winnerIds.some(id => !visibleIds.includes(id))
+    ? [...participants.filter(id => winners.has(id)), ...participants.filter(id => !winners.has(id))].slice(0, 4)
+    : visibleIds;
   frame.innerHTML = uniqueIds.map((id, index) => {
     const wrestler = getWrestlerById(id);
     const image = wrestlerImageUrl(wrestler);
     if (!image) return '';
     const belts = CHAMPIONSHIPS.filter(def => holders[def.id]?.includes(id)).map(def => BELT_IMAGES[def.id]).filter(Boolean);
     const beltHtml = belts.map(url => `<img class="bc-wrestler-belt" src="${url}" alt="">`).join('');
-    return `<span class="bc-wrestler" style="--bc-index:${index}"><img class="bc-wrestler-photo" src="${image}" alt="">${beltHtml}</span>`;
+    return `<span class="bc-wrestler${winners.has(id) ? ' bc-wrestler-winner' : ''}" style="--bc-index:${index}"><img class="bc-wrestler-photo" src="${image}" alt="">${beltHtml}${winners.has(id) ? '<b class="bc-winner-badge">WINNER</b>' : ''}</span>`;
   }).join('');
   frame.classList.toggle('visible', Boolean(frame.children.length));
   frame.dataset.count = String(frame.children.length);
@@ -300,10 +286,10 @@ export function playBroadcast(result, { onComplete = () => {} } = {}) {
   const posterImage = root.querySelector('.bc-ppv-poster');
   posterImage.src = poster.canvas.toDataURL('image/png');
   const steps = buildTimeline(result);
-  const lineEl = root.querySelector('.bc-line');
-  const voiceEl = root.querySelector('.bc-voice');
   const heatFill = root.querySelector('.bc-heat i');
   const timeEl = root.querySelector('.bc-time');
+  const lineEl = root.querySelector('.bc-line');
+  const voiceEl = root.querySelector('.bc-voice');
 
   session = {
     root,
@@ -313,13 +299,12 @@ export function playBroadcast(result, { onComplete = () => {} } = {}) {
     target: 0,
     startedAt: performance.now(),
     stepTimer: null,
-    typeTimer: null,
+    match: null,
     raf: null,
   };
 
   function clearTimers() {
     clearTimeout(session.stepTimer);
-    clearInterval(session.typeTimer);
   }
 
   function finish() {
@@ -335,25 +320,68 @@ export function playBroadcast(result, { onComplete = () => {} } = {}) {
     onComplete(result);
   }
 
-  function typeLine(step) {
-    voiceEl.textContent = ANNOUNCERS[step.voice] ?? '';
-    lineEl.className = `bc-line${step.emphasis ? ' emphasis' : ''}`;
-    if (REDUCED_MOTION) {
-      lineEl.textContent = step.text;
-      return;
+  function renderMatch() {
+    const current = session.match;
+    if (!current) return;
+    const progress = REDUCED_MOTION ? 1 : Math.min(1, current.elapsed / MATCH_ANIMATION_MS);
+    const meters = matchMeterState(current.result, progress);
+    const hype = root.querySelector('.bc-match-hype-track');
+    hype.querySelector('i').style.width = `${meters.hype}%`;
+    hype.setAttribute('aria-valuenow', String(Math.round(meters.hype)));
+    root.querySelector('.bc-match-hype-value').textContent = `${Math.round(meters.hype)}/100`;
+    const advantage = root.querySelector('.bc-match-advantage-track');
+    advantage.querySelector('.bc-match-advantage-marker').style.left = `${meters.advantage}%`;
+    advantage.setAttribute('aria-valuenow', String(Math.round(meters.advantage)));
+    const leader = progress >= 1 ? current.result.winnerNames || 'EVEN' : meters.advantage < 45 ? current.left : meters.advantage > 55 ? current.right : 'EVEN';
+    advantage.setAttribute('aria-valuetext', leader === 'EVEN' ? 'Evenly matched' : `${leader} has the advantage`);
+    root.querySelector('.bc-match-leader').textContent = leader;
+    session.heat = meters.hype;
+    const callIndex = Math.min(current.calls.length - 1, Math.floor(progress * current.calls.length));
+    if (callIndex !== current.callIndex) {
+      current.callIndex = callIndex;
+      const call = current.calls[callIndex];
+      lineEl.textContent = call?.text ?? '';
+      voiceEl.textContent = ANNOUNCERS[call?.voice] ?? '';
     }
-    lineEl.textContent = '';
-    let cursor = 0;
-    const speed = Math.max(8, 20 / session.speed);
-    session.typeTimer = setInterval(() => {
-      cursor += 1;
-      lineEl.textContent = step.text.slice(0, cursor);
-      if (cursor >= step.text.length) clearInterval(session.typeTimer);
-    }, speed);
+    if ((current.elapsed >= MATCH_ANIMATION_MS || REDUCED_MOTION) && !current.revealed) {
+      current.revealed = true;
+      root.querySelector('.bc-match-decision').textContent = matchResultText(current.result);
+      root.querySelector('.bc-match-finish').textContent = current.result.finish ?? '';
+      const score = root.querySelector('.bc-match-score');
+      score.querySelector('b').textContent = `${current.result.rating}/100`;
+      score.querySelector('span').textContent = current.result.stars || 'DUD';
+      score.querySelector('em').textContent = current.result.grade;
+      setWrestlers(root, current.result.participantIds, steps[session.index].holders, current.result.winnerIds ?? []);
+      root.classList.toggle('match-has-winner', Boolean(current.result.winnerIds?.length));
+      root.classList.add('match-decided');
+    }
+  }
+
+  function startMatch(match) {
+    const left = match.sideNames[0];
+    const right = match.sideNames.slice(1).join(' / ');
+    const beats = (match.beats ?? []).filter(beat => !beat.isFinish && beat.text);
+    const calls = beats.length > 2 ? [beats[0], beats.at(-1)] : beats;
+    session.match = { result: match, left, right, calls, callIndex: null, elapsed: 0, lastTick: performance.now(), revealed: false };
+    root.classList.remove('match-decided');
+    root.classList.remove('match-has-winner');
+    root.querySelector('.bc-match-slot').textContent = match.label;
+    root.querySelector('.bc-match-names').textContent = match.sideNames.join(' vs. ');
+    root.querySelector('.bc-match-meta').textContent = [match.typeName, match.stakeId !== 'none' ? companyBrandedText(match.stakeName) : ''].filter(Boolean).join(' / ');
+    root.querySelector('.bc-match-side-left').textContent = left;
+    root.querySelector('.bc-match-side-right').textContent = right;
+    root.querySelector('.bc-match-decision').textContent = '';
+    root.querySelector('.bc-match-finish').textContent = '';
+    hideStage(root);
+    setLower(root, null);
+    renderMatch();
   }
 
   function advance() {
     clearTimers();
+    session.match = null;
+    lineEl.textContent = '';
+    voiceEl.textContent = '';
     session.index += 1;
     const step = steps[session.index];
     if (!step) {
@@ -378,17 +406,11 @@ export function playBroadcast(result, { onComplete = () => {} } = {}) {
         session.stepTimer = setTimeout(advance, step.ms / session.speed);
       });
       return;
-    } else if (step.kind === 'beat') {
-      hideStage(root);
-      typeLine(step);
-      if (step.lower) setLower(root, step.lower);
+    } else if (step.kind === 'match') {
+      startMatch(step.match);
+      return;
     } else {
       setStage(root, step, step.kind);
-      if (step.kind === 'card' || step.kind === 'entrance') {
-        lineEl.textContent = '';
-        voiceEl.textContent = '';
-        hideStage(root);
-      }
       setLower(root, step.lower ?? null);
     }
 
@@ -397,9 +419,20 @@ export function playBroadcast(result, { onComplete = () => {} } = {}) {
 
   function tick() {
     if (!session) return;
+    if (session.match) {
+      const now = performance.now();
+      session.match.elapsed += (now - session.match.lastTick) * session.speed;
+      session.match.lastTick = now;
+      renderMatch();
+      const total = REDUCED_MOTION ? MATCH_RESULT_HOLD_MS : MATCH_ANIMATION_MS + MATCH_RESULT_HOLD_MS;
+      if (session.match.elapsed >= total) advance();
+      if (!session) return;
+    }
     // Crowd noise surges to the beat's heat, then decays like a real room.
-    session.heat += (session.target - session.heat) * 0.12;
-    session.target = Math.max(18, session.target - 0.35);
+    if (!session.match) {
+      session.heat += (session.target - session.heat) * 0.12;
+      session.target = Math.max(18, session.target - 0.35);
+    }
     heatFill.style.width = `${Math.max(0, Math.min(100, session.heat))}%`;
     root.style.setProperty('--crowd-heat', String(session.heat / 100));
     root.style.setProperty('--crowd-opacity', String(0.34 + session.heat / 265));
@@ -416,7 +449,7 @@ export function playBroadcast(result, { onComplete = () => {} } = {}) {
     if (event.code === 'Escape') {
       finish();
     } else if (event.code === 'Space' || event.code === 'Enter') {
-      advance();
+      next();
     } else if (event.code === 'KeyF') {
       session.speed = session.speed === 1 ? 3 : 1;
       root.classList.toggle('fast', session.speed !== 1);
@@ -427,8 +460,18 @@ export function playBroadcast(result, { onComplete = () => {} } = {}) {
     event.stopPropagation();
   }
 
+  function next() {
+    if (!session || session.root !== root) return;
+    if (session?.match && !session.match.revealed) {
+      session.match.elapsed = MATCH_ANIMATION_MS;
+      renderMatch();
+      return;
+    }
+    advance();
+  }
+
   addEventListener('keydown', onKey, true);
-  root.addEventListener('click', advance);
+  root.addEventListener('click', next);
   tick();
   advance();
 }

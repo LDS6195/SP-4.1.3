@@ -7,7 +7,7 @@ import {
   venues, gmExperienceForShow, gmLevelForExperience, experienceRequiredForLevel, venueUnlocked,
 } from '../data/venues.js';
 import { getMatchType } from '../data/matchTypes.js';
-import { CHAMPIONSHIPS, getChampionship, createTitleTable, defenseStatus, titleBookable, setChampionshipBrand } from '../data/championships.js';
+import { CHAMPIONSHIPS, getChampionship, createTitleTable, defenseStatus, titleBookable, titleMatchCompatible, setChampionshipBrand } from '../data/championships.js';
 import { PPV_CALENDAR, PPV_LOGOS, calendarForShowNumber, createEventBranding, eventDisplayName, ppvDateForShowNumber } from '../data/calendar.js';
 import { MIDCARD_TIERS } from '../data/draft.js';
 import {
@@ -48,7 +48,7 @@ const MAX_SAVED_TEAMS = 20;
 
 export const LOUNGE_ITEMS = [
   { id: 'vinyl-library', name: 'Vinyl Library', description: 'A full wall of records and a working turntable.', cost: 45000, unlockLevel: 1 },
-  { id: 'arcade-cabinet', name: 'Rival Arcade', description: 'A private cabinet for future games and guest challenges.', cost: 70000, unlockLevel: 3 },
+  { id: 'arcade-cabinet', get name() { return `${getCompanyIdentity().acronym} Arcade`; }, description: 'A private cabinet for future games and guest challenges.', cost: 70000, unlockLevel: 3 },
   { id: 'rothko', name: 'Rothko Painting', description: 'A statement piece for the collection wall.', cost: 35000, unlockLevel: 2 },
   { id: 'dali', name: 'Dali Painting', description: 'A surrealist centerpiece for the Lounge.', cost: 40000, unlockLevel: 3 },
   { id: 'goya', name: 'Goya Painting', description: 'A dark, prestigious final piece for the wall.', cost: 50000, unlockLevel: 3 },
@@ -133,18 +133,9 @@ const EMAIL_DEFS = [
     body: ['Okay, I am still not over this. You bought a lottery ticket at the gas station and now you own a wrestling promotion. That is the most insane sentence I have ever typed.', 'You have been the person quoting entrances and drawing up dream cards on notebook paper since we were kids. Now you get to live it. You get to build the cards and the stories.', 'Here is the bad news: buying the promotion, setting up the office, paying permits, and putting the inaugural roster budget together burned through most of the winnings. We have $250,000 in operating cash. That is enough to put on a real first show, but we have to be smart. I’m confident we’ll be earning it all back soon.', 'One last thing: what are we calling this company? Reply with it below and I will get our graphic designer on a logo!'],
   },
   {
-    id: 'welcome-reply',
-    from: state => `RICK O'SHEA, VICE PRESIDENT · ${state.company.acronym}`,
-    address: state => `roshea@${state.company.acronym.toLowerCase()}.com`,
-    subject: 'new letterhead',
-    date: 'JAN 02, 1996',
-    available: state => Boolean(state.company?.named),
-    body: state => [`${state.company.name} — I like it. Already had it put on the door.`, `New title, new email, all official: ${state.company.acronym}. Feels real now.`, 'The contracts came bundled with the sale and nobody would tell me whose. Go break the envelopes open and find out who we actually own — then head to the Calendar Wall, plan the month, and build the card before the PPV clock runs out.'],
-  },
-  {
     id: 'calendar', from: 'KAY FABE / PRODUCTION', address: 'kfabe@rivalpromotion.com', subject: 'Three weeks of work, one night that counts', date: 'JAN 04, 1996',
     available: state => state.draft.complete && ((state.leadUp?.log?.length ?? 0) >= 1 || state.showNumber >= 2),
-    body: ['The Calendar Wall gives you one major preparation move in each of the three weeks before a flagship event. You can train, rest people, scout matches, cut a live promo, or simply let the week pass.', 'Each choice carries more weight now, so pick the intervention the roster needs most. There is no shame in skipping ahead to Fight Week when you have nothing useful to add.'],
+    body: ['The Calendar Wall allows you to book the upcoming PPV, train wrestlers to improve their stats and cut promos to develop storylines and build hype for upcoming matches.', 'Visit the finance office to manage our pricing strategies if you think you can better optimize our profits.', 'Oh one more thing, I tried to make the place feel like home, but I left a shopping catalog in your lounge area. Let me know if anything catches your eye.'],
   },
   {
     id: 'booking', from: 'RIVAL PROMOTION NETWORK', address: 'desk@rp-1996.com', subject: 'The card is a set of tradeoffs', date: 'JAN 05, 1996',
@@ -152,16 +143,16 @@ const EMAIL_DEFS = [
     body: ['Match types, entrances, add-ons, venues, and advertising all change the shape of a night. Expensive choices can raise the ceiling, but they also make a bad night more expensive.', 'A projection is a read, not a promise. The best cards usually have a reason to exist, a rested roster, and enough money left to run the next one.'],
   },
   {
-    id: 'progression', from: 'KAY FABE / PRODUCTION', address: 'kfabe@rivalpromotion.com', subject: 'The building gets bigger when you earn it', date: 'AFTER SHOW 4',
+    id: 'progression', from: 'KAY FABE / PRODUCTION', address: 'kfabe@rivalpromotion.com', subject: 'Take a look around', date: '1996-05-01',
     available: state => state.career.showsRun >= 4,
-    body: ['Some production packages and match types are deliberately out of reach early on. Higher GM levels open more ambitious options, but money and risk still matter after they unlock.', 'Do not mistake a larger menu for a better card. The right option for the roster in front of you is usually the one that leaves room for the next month.'],
+    body: ['Four shows in, and this place is starting to have a history. When you get a minute, take a look at the Computer and the Trophy Gallery.', 'The Computer has your roster, wrestler profiles, rankings, company stats, news, and inbox. It\'s a good place to check how everyone is doing between shows.', 'Over in the Trophy Gallery, you\'ll find the trophies you\'ve earned, company records, and championship history. We have plenty of empty space left to fill. Go have a look.'],
   },
   {
     id: 'free-agent-introduction', from: "RICK O'SHEA / TALENT RELATIONS", address: 'talent@rivalpromotion.com',
-    subject: 'Your first Free Agent Pack is waiting', date: 'AFTER SHOW 3',
+    subject: 'Your first Free Agent Pack is waiting', date: '1996-04-01',
     available: state => state.career.showsRun >= 3,
     vendingRewardId: 'free-agent-introduction',
-    body: ['Three shows down. Time to give the locker room a new face. A free Free Agent Pack is waiting in the Lounge vending machine: one wrestler contract, one Match card, and one Promo card. The contract is drawn from available free agents, so you do not choose who walks through the door.', 'If there is room on the roster, they sign immediately. If the roster is full, their contract waits in the intake queue; review it at the Booking Board and make room or pass. Queued contracts are saved, not lost.', 'Use Visit Vending Machine below to open your free pack. It costs nothing, stays waiting until claimed, and can only be claimed once. The machine also sells Match, Promo, Variety, and custom wrestler packs; your Card Book tracks everything you own.'],
+    body: ['Three shows down. Time to give the locker room a new face. A free card pack is waiting in the Lounge vending machine. A Free Agent pack: 1 wrestler, 1 match card, and 1 promo card.', 'Visit the Vending Machine any time you\'d like to spend your hard earned money on card packs.'],
   },
 ];
 
@@ -235,6 +226,7 @@ const defaultState = () => {
   results: [],
   archive: [],
   promoHistory: [],
+  randomEventHistory: [],
   numberOneContenderId: null,
   battleRoyaleHistory: [],
   stamina: {},
@@ -274,10 +266,56 @@ const defaultState = () => {
 
 let state = load();
 setChampionshipBrand(state.company.acronym);
+recordRandomEvent(state.leadUp.randomEvent?.result);
 syncMatchLengths();
 applyRosterSnapshot();
+repairTitleHolders();
+revokeStaleTitleBookings();
 syncBookedTeams();
 persist();
+
+function repairTitleHolders() {
+  CHAMPIONSHIPS.forEach(def => {
+    const title = state.titles[def.id];
+    if (!title?.holders?.length) return;
+    const valid = ids => ids?.length === def.holders && new Set(ids).size === def.holders && ids.every(id => getWrestlerById(id) && isSigned(id));
+    if (valid(title.holders)) return;
+    title.unlocked = true;
+    const history = title.history ?? [];
+    const idsForReign = reign => {
+      const names = def.kind === 'singles' ? [reign.holderNames] : String(reign.holderNames ?? '').split(' & ');
+      return names.map(name => wrestlers.find(wrestler => wrestler.name === name?.trim() || wrestler.nickname === name?.trim())?.id).filter(Boolean);
+    };
+    const previousIndex = history.findIndex(reign => valid(idsForReign(reign)));
+    const results = state.results ?? [];
+    const previousResult = results.find(show => show.matches?.some(match => match.titleOutcome?.titleId === def.id && valid(match.titleOutcome.previousHolders)));
+    const previousOutcome = previousResult?.matches.find(match => match.titleOutcome?.titleId === def.id && valid(match.titleOutcome.previousHolders))?.titleOutcome;
+    const holders = previousIndex >= 0 ? idsForReign(history[previousIndex]) : previousOutcome?.previousHolders;
+    if (!holders) {
+      title.holders = [];
+      title.since = null;
+      title.sinceShow = 0;
+      title.defenses = 0;
+      title.lastDefendedShow = 0;
+      title.reignNumber = 0;
+      return;
+    }
+    const previous = previousIndex >= 0 ? history[previousIndex] : {};
+    const shows = [...(state.archive ?? []), ...results];
+    const endedShow = shows.find(show => show.date === previous.to)?.showNumber ?? previousResult?.showNumber ?? title.sinceShow;
+    const sinceShow = shows.find(show => show.date === previous.from)?.showNumber ?? Math.max(1, endedShow - (previous.shows ?? 1));
+    const defenses = results.filter(show => show.matches?.some(match => match.titleId === def.id
+      && titleMatchCompatible(def, getMatchType(match.typeId))
+      && holders.every(id => match.titleOutcome?.newHolders?.includes(id)))).map(show => show.showNumber);
+    title.holders = [...holders];
+    title.since = previous.from ?? previousResult?.date ?? title.since;
+    title.sinceShow = sinceShow;
+    title.reignNumber = previous.reignNumber ?? Math.max(1, title.reignNumber - Math.max(1, previousIndex + 1));
+    title.defenses = previous.defenses ?? 0;
+    title.lastDefendedShow = Math.max(sinceShow, ...defenses);
+    if (previousIndex >= 0) title.history = history.slice(previousIndex + 1);
+  });
+}
 
 function load() {
   try {
@@ -591,6 +629,16 @@ export function getCompanyIdentity() {
   return state.company;
 }
 
+export function companyBrandedText(value) {
+  const { acronym, name } = state.company;
+  return String(value ?? '')
+    .replace(/\bRival World Championship\b|\bRP World Title\b/gi, () => `${acronym} World Title`)
+    .replace(/\bRival Tag Team Championship\b|\bRP Tag Team Title\b/gi, () => `${acronym} Tag Team Title`)
+    .replace(/\bRP\b/g, () => acronym)
+    .replace(/\bRIVAL PROMOTION\b/g, () => name.toUpperCase())
+    .replace(/\bRival Promotion\b/g, () => name);
+}
+
 export function hasNamedCompany() {
   return Boolean(state.company?.named);
 }
@@ -625,14 +673,21 @@ export function getInbox() {
   // Dynamic and scripted mail share one newest-first timeline.
   const familyEmails = [...(state.inbox.dynamic ?? [])].reverse().map(email => ({ ...email, unread: !readIds.has(email.id) }));
   return [...familyEmails, ...storyEmails]
+    .map(email => ({
+      ...email,
+      date: /^AFTER SHOW \d+$/i.test(email.date ?? '')
+        ? new Date(Date.UTC(1996, Number(email.date.match(/\d+/)[0]), 1)).toISOString().slice(0, 10)
+        : email.date,
+      from: companyBrandedText(email.from),
+      address: email.address.replace(/@(rivalpromotion\.com|rp-1996\.com)$/i, `@${state.company.acronym.toLowerCase()}.com`),
+      subject: companyBrandedText(email.subject),
+      body: email.body.map(companyBrandedText),
+    }))
     .map((email, index) => {
-      const afterShow = email.date?.match(/^AFTER SHOW (\d+)$/i);
       const parsedDate = Date.parse(email.date);
       const order = Number.isFinite(parsedDate)
         ? parsedDate
-        : afterShow
-          ? Date.UTC(1996, Number(afterShow[1]) - 1, 1)
-          : Number.isFinite(email.showNumber)
+        : Number.isFinite(email.showNumber)
             ? Date.UTC(1996, email.showNumber - 1, 1)
             : 0;
       return { email, index, order };
@@ -663,7 +718,7 @@ export function exportGameData() {
 
 export function importGameData(raw) {
   const parsed = JSON.parse(raw);
-  if (!parsed || typeof parsed !== 'object' || !parsed.show || !parsed.career) throw new Error('Invalid Rival Promotion save file.');
+  if (!parsed || typeof parsed !== 'object' || !parsed.show || !parsed.career) throw new Error(`Invalid ${state.company.name} save file.`);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
 }
 
@@ -1082,6 +1137,9 @@ function pruneTeams() {
   const seen = new Set();
   state.teams = state.teams
     .filter(team => team.active && team.memberIds.length === 2 && team.memberIds.every(isSigned))
+    .filter(team => team.createdExplicitly || (team.uses ?? 0) > 0
+      || (team.record?.w ?? 0) + (team.record?.l ?? 0) + (team.record?.o ?? 0) > 0
+      || team.name !== team.memberIds.map(id => getWrestlerById(id).name.split(' ').at(-1)).join(' & '))
     .sort((first, second) => (second.lastUsedShow ?? 0) - (first.lastUsedShow ?? 0)
       || (second.lastUsedOrder ?? 0) - (first.lastUsedOrder ?? 0)
       || (second.uses ?? 0) - (first.uses ?? 0))
@@ -1141,19 +1199,13 @@ function syncBookedTeams() {
     }
     team.uses ??= (team.record?.w ?? 0) + (team.record?.l ?? 0) + (team.record?.o ?? 0);
   });
-  (state.show.matches ?? []).forEach(match => {
-    const type = getMatchType(match.typeId);
-    if (!type?.slots.teams || type.slots.perTeam !== 2) return;
-    match.teams.forEach(side => {
-      if (side.length === 2 && side.every(Boolean)) rememberTeam(side);
-    });
-  });
   pruneTeams();
 }
 
 export function createTeam(name, memberIds) {
   const team = rememberTeam(memberIds, name);
   if (!team) return { ok: false, message: 'Choose two signed wrestlers.' };
+  team.createdExplicitly = true;
   pruneTeams();
   persist();
   return { ok: true, team };
@@ -1164,6 +1216,7 @@ export function renameTeam(teamId, name) {
   const teamName = String(name ?? '').replace(/[<>&"]/g, '').trim().slice(0, 32);
   if (!team || !teamName) return { ok: false, message: 'Enter a team name.' };
   team.name = teamName;
+  team.createdExplicitly = true;
   persist();
   return { ok: true, team };
 }
@@ -1535,7 +1588,7 @@ export function canBookTitle(titleId, matchId) {
   const match = getMatch(matchId);
   if (!def || !titleData || !match) return false;
   if (!titleBookable(def, state.show, titleData)) return false;
-  if (def.kind === 'tag' ? match.typeId !== 'tag-team' : match.typeId === 'tag-team') return false;
+  if (!titleMatchCompatible(def, getMatchType(match.typeId))) return false;
   if (!titleData.holders.length) return true;
   const participants = matchParticipantIds(match);
   return titleData.holders.every(id => participants.includes(id));
@@ -1599,6 +1652,55 @@ export function getPromoInventory() {
 
 export function getPromoHistoryFor(wrestlerId) {
   return (state.promoHistory ?? []).filter(entry => entry.participantIds?.includes(wrestlerId));
+}
+
+export function getWrestlerHistory(wrestlerId) {
+  const events = (state.randomEventHistory ?? []).filter(event => event.wrestlerIds?.includes(wrestlerId))
+    .sort((first, second) => (Date.parse(second.date) || 0) - (Date.parse(first.date) || 0));
+  const eventPromoIds = new Set(events.map(event => `event-promo-${event.showNumber}-${event.eventId}`));
+  const promoHistory = getPromoHistoryFor(wrestlerId).filter(promo => !eventPromoIds.has(promo.id));
+  const attached = new Set();
+  const rows = [];
+  const shows = state.archive?.length ? state.archive : state.results ?? [];
+  const appendShow = (show, house = false) => {
+    const fullShow = house ? show : state.results?.find(result => result.showNumber === show.showNumber && result.date === show.date);
+    (show.matches ?? []).forEach((savedMatch, index) => {
+      if (!savedMatch.participantIds?.includes(wrestlerId)) return;
+      const match = { ...savedMatch, ...(fullShow?.matches?.[index] ?? {}) };
+      const sameShow = promo => promo.showNumber != null && show.showNumber != null
+        ? promo.showNumber === show.showNumber
+        : promo.showName === (show.showName ?? show.name) && promo.date === show.date;
+      const linked = house ? [] : promoHistory.filter(promo => {
+        if (!sameShow(promo)) return false;
+        if (promo.matchId && match.matchId) return promo.matchId === match.matchId;
+        if (match.matchId && promo.id?.endsWith(`-${match.matchId}`)) return true;
+        return promo.participantIds?.length >= 2 && promo.participantIds.every(id => match.participantIds.includes(id));
+      });
+      const promos = [...(match.promos ?? []), match.promoCard, match.storyIncident, ...linked].filter(Boolean)
+        .filter((promo, promoIndex, entries) => entries.findIndex(entry => entry.id === promo.id) === promoIndex)
+        .filter(promo => !promo.participantIds || promo.participantIds.includes(wrestlerId));
+      promos.forEach(promo => { if (promo.id) attached.add(promo.id); });
+      const ownSide = match.sideIds?.findIndex(side => side.includes(wrestlerId)) ?? -1;
+      const opponents = ownSide >= 0
+        ? match.sideNames?.filter((name, side) => side !== ownSide).join(' / ')
+        : match.participantIds.filter(id => id !== wrestlerId).map(id => getWrestlerById(id)?.name ?? id).join(' & ');
+      const draw = ['draw', 'time-limit draw'].includes(match.outcome);
+      const resultCode = match.resultCodes?.[wrestlerId] ?? match.effects?.find(effect => effect.id === wrestlerId)?.resultCode
+        ?? (draw ? 'D' : match.winnerIds?.includes(wrestlerId) ? 'W' : match.winnerIds?.length ? 'L' : 'NC');
+      const winner = Array.isArray(match.winnerNames) ? match.winnerNames.join(' & ') : match.winnerNames;
+      rows.push({
+        event: show.showName ?? show.name ?? 'House Show', date: show.date,
+        opponentName: opponents || 'Unknown', result: resultCode,
+        type: match.typeName ?? getMatchType(match.typeId)?.name ?? 'Match',
+        rating: match.rating, stars: match.stars, promos,
+        description: match.finish || (draw ? 'Draw.' : winner ? `${winner} won${match.time ? ` in ${match.time}` : ''}.` : 'No decisive winner.'),
+      });
+    });
+  };
+  shows.forEach(show => appendShow(show));
+  (state.houseShows ?? []).forEach(show => appendShow(show, true));
+  rows.sort((first, second) => (Date.parse(second.date) || 0) - (Date.parse(first.date) || 0));
+  return { matches: rows, promos: promoHistory.filter(promo => !attached.has(promo.id)), events };
 }
 
 export function getCardBookInventory() {
@@ -1714,7 +1816,7 @@ export function setMatchWinner(matchId, wrestlerId) {
   persist();
 }
 
-export function runMonthlyPromoCardPhase(matchId, wrestlerId) {
+export function runMonthlyPromoCardPhase(matchId, wrestlerId, { skip = false } = {}) {
   const match = getMatch(matchId);
   const selected = getMatchPromoCard(matchId);
   const wrestler = getWrestlerById(wrestlerId);
@@ -1723,7 +1825,12 @@ export function runMonthlyPromoCardPhase(matchId, wrestlerId) {
   }
   if (match.promoCardPlayed || state.leadUp.phaseResults?.promoCard) return { ok: false, message: 'This month\'s Promo phase has already been completed.' };
 
-  if (!selected) {
+  if (skip || !selected) {
+    if (skip) {
+      const cleared = setMatchPromoCard(matchId, '', null);
+      if (!cleared.ok) return cleared;
+      match.promoCardEffect = null;
+    }
     const result = { promoCardId: null, name: 'No Promo Card', wrestlerId, wrestlerName: wrestler.name, matchId, text: `${wrestler.name} had the week to themselves; no Promo card was played.` };
     state.leadUp.phaseResults = { ...state.leadUp.phaseResults, promoCard: result };
     state.leadUp.promoCardId = null;
@@ -2130,9 +2237,21 @@ function applyRandomEventEffect(card, { a, b, angle }, date) {
   return effects;
 }
 
+function recordRandomEvent(result) {
+  if (!result) return;
+  state.randomEventHistory ??= [];
+  const id = `random-event-${state.showNumber}-${result.id}`;
+  if (state.randomEventHistory.some(event => event.id === id)) return;
+  state.randomEventHistory.unshift({ ...result, id, eventId: result.id, showNumber: state.showNumber, showName: state.show.name });
+  state.randomEventHistory = state.randomEventHistory.slice(0, CAMPAIGN_SHOWS);
+}
+
 export function resolveRandomEvent() {
   const event = state.leadUp.randomEvent;
-  if (!event || event.resolved) return event?.result ?? null;
+  if (!event || event.resolved) {
+    recordRandomEvent(event?.result);
+    return event?.result ?? null;
+  }
   const roster = getSignedRoster();
   const bookedIds = new Set((state.show.matches ?? []).flatMap(matchParticipantIds));
   const date = randomEventDate(event.offset);
@@ -2155,6 +2274,7 @@ export function resolveRandomEvent() {
   event.resolved = true;
   event.seen = !result;
   event.result = result;
+  recordRandomEvent(result);
   persist();
   return result;
 }
@@ -2786,7 +2906,7 @@ export function getTutorialPacks() {
 export function claimTutorialPack(rewardId) {
   const reward = getTutorialPacks().find(entry => entry.id === rewardId);
   if (!reward || reward.claimed) return { ok: false, message: 'That free pack is not available.' };
-  const result = awardPack(reward.pack, true);
+  const result = awardPack({ ...reward.pack, wrestlerTiers: reward.wrestlerTiers, wrestlerTierWeights: reward.wrestlerTierWeights ?? reward.pack.wrestlerTierWeights }, true);
   if (!result.ok) return result;
   state.cards.tutorialClaims[reward.id] = true;
   persist();
@@ -2821,19 +2941,20 @@ function packFreeAgents() {
   return getFreeAgents().filter(entry => !queued.has(entry.wrestler.id));
 }
 
-// A contract pack pulls from the free-agency pool on base tier odds — no chips, so a
-// legend is a long shot even at this price.
-function rollPackWrestler() {
-  const pool = packFreeAgents().map(entry => entry.wrestler);
-  if (!pool.length) return null;
-  const entries = pool.map(w => ({ w, weight: BASE_PULL_WEIGHT[getDraftTier(w)] ?? 6 }));
+function rollPackWrestler(allowedTiers = null, tierWeights = CRIB_PACKS['free-agent'].wrestlerTierWeights) {
+  const pool = packFreeAgents().map(entry => entry.wrestler).filter(wrestler => !allowedTiers || allowedTiers.includes(getDraftTier(wrestler)));
+  const entries = Object.entries(tierWeights).map(([tier, weight]) => ({
+    weight, wrestlers: pool.filter(wrestler => getDraftTier(wrestler) === tier),
+  })).filter(entry => entry.weight > 0 && entry.wrestlers.length);
+  if (!entries.length) return null;
   const total = entries.reduce((sum, e) => sum + e.weight, 0);
   let roll = Math.random() * total;
   for (const entry of entries) {
+    if (roll < entry.weight) return entry.wrestlers[Math.floor(Math.random() * entry.wrestlers.length)];
     roll -= entry.weight;
-    if (roll <= 0) return entry.w;
   }
-  return entries[entries.length - 1].w;
+  const fallback = entries[entries.length - 1].wrestlers;
+  return fallback[Math.floor(Math.random() * fallback.length)];
 }
 
 export function buyPack(kind) {
@@ -2871,8 +2992,8 @@ function awardPack(pack, free = false, createdWrestler = null) {
     return { ok: false, message: `${pack.name} runs $${pack.cost.toLocaleString()}.` };
   }
 
-  const wrestler = pack.customWrestler ? createdWrestler : pack.wrestlers ? rollPackWrestler() : null;
-  if (pack.wrestlers && !wrestler) return { ok: false, message: 'Nobody left in free agency to sign.' };
+  const wrestler = pack.customWrestler ? createdWrestler : pack.wrestlers ? rollPackWrestler(pack.wrestlerTiers, pack.wrestlerTierWeights) : null;
+  if (pack.wrestlers && !wrestler) return { ok: false, message: pack.wrestlerTiers ? 'No midcard-or-better free agents are available right now. Your free pack will remain unclaimed.' : 'Nobody left in free agency to sign.' };
 
   if (!free) state.bankroll -= pack.cost;
 
@@ -3400,7 +3521,17 @@ function applyTitleOutcomes(result) {
     if (!outcome) return;
     const def = getChampionship(outcome.titleId);
     const title = state.titles[outcome.titleId];
-    if (!def || !title) return;
+    const bookedMatch = state.show.matches.find(match => match.id === matchResult.matchId);
+    const holders = [...new Set(outcome.newHolders ?? [])];
+    const titleChanged = outcome.type === 'change' || outcome.type === 'crowned';
+    if (!def || !title || bookedMatch?.titleId !== def.id || matchResult.titleId !== def.id
+      || !titleMatchCompatible(def, getMatchType(matchResult.typeId))
+      || holders.length !== def.holders || holders.length !== outcome.newHolders?.length
+      || !holders.every(id => matchResult.participantIds?.includes(id))
+      || (titleChanged && !holders.every(id => matchResult.winnerIds?.includes(id)))) {
+      matchResult.titleOutcome = null;
+      return;
+    }
     defended.add(def.id);
 
     title.prestige = Math.max(5, Math.min(100, title.prestige + (matchResult.rating - title.prestige) * 0.18));
@@ -3418,7 +3549,7 @@ function applyTitleOutcomes(result) {
           lostTo: outcome.newHolderNames,
         });
       }
-      title.holders = outcome.newHolders;
+      title.holders = [...holders];
       title.since = result.date;
       title.sinceShow = state.showNumber;
       title.reignNumber += 1;
@@ -3607,6 +3738,7 @@ export function runShow() {
   if (battleRoyaleResult) {
     const winnerId = battleRoyaleResult.winnerIds?.[0] ?? null;
     const firstEliminatedId = battleRoyaleResult.firstEliminatedId ?? null;
+    const secondEliminatedId = battleRoyaleResult.secondEliminatedId ?? null;
     state.battleRoyaleHistory.unshift({
       show: state.show.name,
       date: result.date,
@@ -3614,6 +3746,8 @@ export function runShow() {
       winnerName: winnerId ? getWrestlerById(winnerId)?.name : 'No winner',
       firstEliminatedId,
       firstEliminatedName: firstEliminatedId ? getWrestlerById(firstEliminatedId)?.name : 'Unknown',
+      secondEliminatedId,
+      secondEliminatedName: secondEliminatedId ? getWrestlerById(secondEliminatedId)?.name : 'Unknown',
       entrants: battleRoyaleResult.participantIds.length,
       rating: battleRoyaleResult.rating,
     });
@@ -3635,6 +3769,7 @@ export function runShow() {
     const participantIds = incident.participants ?? [];
     const incidentEntry = {
       id: `incident-promo-${state.showNumber}-${match.id}`,
+      matchId: match.id,
       promoId: `incident:${incident.templateId}`,
       promoName: template?.name ?? 'Match Incident',
       rarity: 'Incident',
@@ -3671,6 +3806,7 @@ export function runShow() {
     const resultMatch = result.matches[index];
     const historyEntry = {
       id: `promo-${state.showNumber}-${match.id}`,
+      matchId: match.id,
       promoId: match.promoCardId,
       promoName: promo.name,
       rarity: promo.rarity?.name ?? 'Unique',
@@ -3734,6 +3870,7 @@ export function runShow() {
     capacity: result.capacity,
     tvViewers: result.tvViewers,
     matches: result.matches.map(match => ({
+      matchId: match.matchId,
       label: match.label,
       participantIds: match.participantIds,
       sideIds: match.sideIds,
@@ -3745,6 +3882,12 @@ export function runShow() {
       winnerNames: match.winnerNames,
       outcome: match.outcome,
       rating: match.rating,
+      buzz: match.buzz,
+      time: match.time,
+      finish: match.finish,
+      stars: match.stars,
+      resultCodes: Object.fromEntries((match.effects ?? []).map(effect => [effect.id, effect.resultCode])),
+      promos: [match.promoCard, match.storyIncident].filter(Boolean).map(promo => ({ id: promo.id, promoName: promo.promoName, text: promo.text, participantIds: promo.participantIds })),
     })),
   });
   state.archive = state.archive.slice(0, 240);

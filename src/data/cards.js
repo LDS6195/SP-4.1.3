@@ -105,6 +105,7 @@ export const GIMMICK_RARITIES = {
     id: 'common',
     name: 'Common',
     color: '#9c9385',
+    qualityBonus: 3,
     ceilingBonus: 0,
     buzzBonus: 0,
     varianceMod: 1.2,
@@ -115,6 +116,7 @@ export const GIMMICK_RARITIES = {
     id: 'rare',
     name: 'Rare',
     color: '#5f8bb6',
+    qualityBonus: 6,
     ceilingBonus: 1,
     buzzBonus: 4,
     varianceMod: 0.95,
@@ -125,6 +127,7 @@ export const GIMMICK_RARITIES = {
     id: 'legendary',
     name: 'Legendary',
     color: '#c79a3c',
+    qualityBonus: 9,
     ceilingBonus: 3,
     buzzBonus: 9,
     varianceMod: 0.75,
@@ -206,15 +209,15 @@ export const TITLE_CARDS = ['world', 'tag'];
 // Lounge catalog. You buy a pack, never a card — the moment you can shop for a
 // specific stipulation the scarcity is dead.
 export const CRIB_PACKS = {
-  match: { id: 'match', name: 'Match Pack', blurb: '3 match cards.', cost: 140000, gimmicks: 3, promos: 0, wrestlers: 0, color: '#cf493e' },
-  promo: { id: 'promo', name: 'Promo Pack', blurb: '3 Promo cards.', cost: 140000, gimmicks: 0, promos: 3, wrestlers: 0, color: '#259b82' },
-  'free-agent': { id: 'free-agent', name: 'Free Agent Pack', blurb: '1 wrestler, 1 match card, and 1 Promo card.', cost: 520000, gimmicks: 1, promos: 1, wrestlers: 1, color: '#397fca' },
-  'custom-wrestler': { id: 'custom-wrestler', name: 'Create Your Own Wrestler Pack', blurb: '1 custom wrestler, 1 Match card, and 1 Promo card.', cost: 520000, gimmicks: 1, promos: 1, wrestlers: 1, customWrestler: true, color: '#c66792' },
-  variety: { id: 'variety', name: 'Variety Pack', blurb: '2 match cards and 2 Promo cards.', cost: 200000, gimmicks: 2, promos: 2, wrestlers: 0, color: '#c59b31' },
+  match: { id: 'match', name: 'Match Pack', blurb: '3 match cards.', cost: 91000, gimmicks: 3, promos: 0, wrestlers: 0, color: '#cf493e' },
+  promo: { id: 'promo', name: 'Promo Pack', blurb: '3 Promo cards.', cost: 91000, gimmicks: 0, promos: 3, wrestlers: 0, color: '#259b82' },
+  'free-agent': { id: 'free-agent', name: 'Free Agent Pack', blurb: '1 wrestler, 1 match card, and 1 Promo card.', cost: 338000, gimmicks: 1, promos: 1, wrestlers: 1, wrestlerTierWeights: { legend: 23, star: 32, contender: 40, jobber: 5 }, color: '#397fca' },
+  'custom-wrestler': { id: 'custom-wrestler', name: 'Create Your Own Wrestler Pack', blurb: '1 custom wrestler, 1 Match card, and 1 Promo card.', cost: 338000, gimmicks: 1, promos: 1, wrestlers: 1, customWrestler: true, color: '#c66792' },
+  variety: { id: 'variety', name: 'Variety Pack', blurb: '2 match cards and 2 Promo cards.', cost: 130000, gimmicks: 2, promos: 2, wrestlers: 0, color: '#c59b31' },
 };
 
 export const PACK_TUTORIAL_REWARDS = [
-  { id: 'free-agent-introduction', afterShow: 3, kind: 'free-agent' },
+  { id: 'free-agent-introduction', afterShow: 3, kind: 'free-agent', wrestlerTiers: ['contender', 'star', 'legend'], wrestlerTierWeights: { legend: 1, star: 1, contender: 1, jobber: 0 } },
 ];
 
 // Cards expire at year end so players cannot hoard forever waiting for a perfect moment.

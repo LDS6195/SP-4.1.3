@@ -5,7 +5,7 @@
 
 import { getDraftTier, getWrestlerById } from '../data/wrestlers.js';
 import { getMatchType, getStake, getMatchLength } from '../data/matchTypes.js';
-import { getChampionship } from '../data/championships.js';
+import { getChampionship, titleMatchCompatible } from '../data/championships.js';
 import { getCelebrity, getEntrancePackage } from '../data/production.js';
 import { eventBroadcastGuarantee } from '../data/finances.js';
 import { matchParticipantIds, ratingLabel, gradeFor } from './bookingEngine.js';
@@ -135,7 +135,7 @@ function crowdReaction(rating) {
 // Single match
 // ---------------------------------------------------------------------------
 export function simulateMatch(match, projection, context = {}) {
-  const { staminaLookup = () => 100, isMainEvent = false, position = 0, total = 1, isBattleRoyale = false } = context;
+  const { staminaLookup = () => 100, isMainEvent = false, position = 0, total = 1, isBattleRoyale = match.typeId === 'battle-royal' } = context;
   const type = getMatchType(match.typeId);
   const stake = getStake(match.stakeId);
   const length = getMatchLength(match.lengthId);
@@ -248,7 +248,7 @@ export function simulateMatch(match, projection, context = {}) {
   // out or disqualified keeps the gold and the crowd hates it.
   let titleOutcome = null;
   const titleDef = match.titleId ? getChampionship(match.titleId) : null;
-  if (titleDef && projection.title) {
+  if (titleDef && projection.title && titleMatchCompatible(titleDef, type) && winners.members.length === titleDef.holders) {
     const previousHolders = projection.title.holders;
     const vacant = projection.title.vacant;
     const championWon = !draw && winners.members.some(w => previousHolders.includes(w.id));
@@ -310,7 +310,7 @@ export function simulateMatch(match, projection, context = {}) {
     group.members.forEach(w => {
       const won = groupIndex === 0 && !draw;
       const multiLoss = sides.length > 2 && groupIndex > 0;
-      const battleRoyaleFirstEliminated = isBattleRoyale && groupIndex === scored.length - 1;
+      const battleRoyaleEarlyEliminated = isBattleRoyale && groupIndex >= Math.max(1, scored.length - 2);
       let popDelta = Math.round((finalRating - 58) / 12);
       let momentumDelta = 0;
       let resultCode = 'O';
@@ -332,12 +332,14 @@ export function simulateMatch(match, projection, context = {}) {
           popDelta += 6;
           momentumDelta += 1;
         }
-      } else if (battleRoyaleFirstEliminated) {
-        resultCode = 'O';
-        momentumDelta = finalRating >= 75 ? 0 : -1;
+      } else if (battleRoyaleEarlyEliminated) {
+        resultCode = groupIndex === scored.length - 1 ? 'O' : 'N';
+        popDelta = -3;
+        momentumDelta = -1;
       } else if (isBattleRoyale && multiLoss) {
         resultCode = 'N';
-        momentumDelta = finalRating >= 75 ? 0 : -1;
+        popDelta = 4 + Math.max(0, Math.round((finalRating - 60) / 20));
+        momentumDelta = 1;
       } else if (multiLoss) {
         resultCode = 'O';
         momentumDelta = finalRating >= 75 ? 0 : -1;
@@ -347,6 +349,10 @@ export function simulateMatch(match, projection, context = {}) {
         momentumDelta = -1;
       }
 
+      if (isBattleRoyale && won) {
+        popDelta = Math.max(12, popDelta + 10);
+        momentumDelta = Math.max(3, momentumDelta);
+      }
       if (injury?.id === w.id) momentumDelta -= 1;
       effects.push({ id: w.id, name: w.name, resultCode, popDelta, momentumDelta });
     });
@@ -374,11 +380,13 @@ export function simulateMatch(match, projection, context = {}) {
     loserNames,
     winnerIds: draw ? [] : winners.members.map(w => w.id),
     firstEliminatedId: isBattleRoyale ? scored[scored.length - 1]?.members[0]?.id ?? null : null,
+    secondEliminatedId: isBattleRoyale ? scored[scored.length - 2]?.members[0]?.id ?? null : null,
     outcome: draw ? 'draw' : outcome,
     upset,
     rating: finalRating,
     grade: gradeFor(finalRating),
     stars: starString(finalRating),
+    buzz: projection.buzz,
     projected: projection.quality.expected,
     time,
     finish,

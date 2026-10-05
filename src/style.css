@@ -691,6 +691,9 @@ kbd { padding: 2px 4px; border: 1px solid rgba(211,168,78,.65); color: var(--gol
 .stats-table-wrap { overflow-x: auto; border: 1px solid #423d37; }
 .stats-table { width: 100%; min-width: 520px; border-collapse: collapse; font: 500 12px 'DM Mono', monospace; }
 .stats-table th { padding: 10px 14px; border-bottom: 2px solid var(--gold); color: var(--gold); background: #232227; font: 700 10px 'DM Mono', monospace; letter-spacing: .06em; text-align: left; }
+.stats-table .stats-sort { display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; color: inherit; background: transparent; font: inherit; text-align: inherit; white-space: nowrap; cursor: pointer; }
+.stats-table .stats-sort:hover, .stats-table .stats-sort.active { color: var(--paper); }
+.stats-table .stats-sort span { display: inline-block; width: 10px; text-align: center; }
 .stats-table td { padding: 9px 14px; border-bottom: 1px solid #2c2a28; color: rgba(238,232,218,.85); background: transparent; white-space: nowrap; }
 .stats-table tr:nth-child(even) td { background: rgba(255,255,255,.02); }
 .stats-table tbody tr:hover td { background: rgba(211,168,78,.08); }

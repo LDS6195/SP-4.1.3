@@ -59,7 +59,7 @@ export const MATCH_TYPES = [
     demands: { charisma: 0.35, agility: 0.25, technique: 0.25, stamina: 0.15 },
     chemistryWeight: 0.6,
     baseMinutes: 15,
-    description: 'Gets six names on the poster and protects everyone. Hard to make feel important.',
+    description: 'Gets six names on the poster and protects everyone.',
   },
   {
     id: 'triple-threat',

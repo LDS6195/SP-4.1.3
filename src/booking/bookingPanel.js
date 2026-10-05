@@ -1,7 +1,7 @@
 // Booking Board UI. Simple by default — venue, matchups, done. Everything deeper
 // (production spend, stipulations, add-ons, full P&L) lives behind a fold.
 
-import { wrestlers, getWrestlerById, computeChemistry, momentumLabel, getDraftTier, GAME_START_DATE } from '../data/wrestlers.js';
+import { wrestlers, getWrestlerById, computeChemistry, momentumLabel, recordString, getDraftTier, GAME_START_DATE } from '../data/wrestlers.js';
 import { venues, getVenueById, homeFieldTier, venueRequiredLevel, venueUnlocked } from '../data/venues.js';
 import {
   getMatchType, getStake,
@@ -28,7 +28,7 @@ import worldChampBeltUrl from '../../images/world-champ-belt.png?url';
 import tagBeltUrl from '../../images/tag-belt.png?url';
 import { wrestlerImageUrl } from '../data/wrestlerImages.js';
 import { companyLogoUrl } from '../data/companyLogo.js';
-import { createElement, Share2, Download, ArrowLeft, Map as MapIcon } from 'lucide';
+import { createElement, Share2, Download, ArrowLeft, Check, Map as MapIcon } from 'lucide';
 import { marketHeatmapHtml } from './marketHeatmap.js';
 import { marketHypeForVenue, hypeTier, MARKET_LOCATIONS } from './marketHype.js';
 
@@ -155,7 +155,7 @@ function matchRowHtml(match, index, p, total) {
   const extrasCount = match.extras.length + (match.celebrityId !== 'none' ? 1 : 0);
   const sub = [
     type?.name ?? 'Unset',
-    title ? title.name : (stake.id === 'none' ? null : stake.name),
+    title ? booking.companyBrandedText(title.name) : (stake.id === 'none' ? null : stake.name),
     p.valid ? `${p.minutes} min` : null,
     p.valid ? compactMoney(p.cost) : null,
     extrasCount ? `${extrasCount} add-on${extrasCount > 1 ? 's' : ''}` : null,
@@ -164,7 +164,7 @@ function matchRowHtml(match, index, p, total) {
   return `<article class="bk-match ${index === total - 1 ? 'is-main' : ''}">
     <div class="bk-match-row">
       <button class="bk-match-open" data-bk="edit-match" data-value="${match.id}">
-        <span class="bk-slot-label">${positionLabel(index, total)}${title ? ` <em class="bk-belt-tag">${title.short} TITLE</em>` : ''}</span>
+        <span class="bk-slot-label">${positionLabel(index, total)}${title ? ` <em class="bk-belt-tag">${booking.getCompanyIdentity().acronym} TITLE</em>` : ''}</span>
         <span class="bk-match-name-line">${matchPortraitsHtml(matchParticipantIds(match))}<b class="bk-match-names">${sideNames(match)}</b></span>
         <span class="bk-match-sub">${sub}</span>
       </button>
@@ -449,7 +449,7 @@ function storyStepperHtml(selection, spotlight, partner) {
       ${selected.effect?.formsTagTeam ? '<small>AFTER THIS MATCH, THEY FORM A TAG TEAM WITH MAX CHEMISTRY</small>' : ''}
       ${selected.played
         ? '<span class="promo-card-played">PLAYED FOR THIS SHOW</span>'
-        : `<button class="bk-chip" data-bk="promo-card-clear" data-value="${match.id}">REMOVE PROMO CARD</button>`}
+        : `<div class="bk-chips"><button class="bk-chip" data-bk="promo-card-clear" data-value="${match.id}">REMOVE PROMO CARD</button><button class="bk-chip promo-card-skip" data-bk="promo-card-skip" data-match="${match.id}" data-wrestler="${spotlight.id}">SKIP PROMO CARD THIS MONTH</button></div>`}
       ${selected.effect ? `<small>HYPE +${selected.effect.matchBuzz} · ${getWrestlerById(selected.wrestlerId)?.name ?? 'Wrestler'} MOMENTUM +${selected.effect.momentum} · POP +${selected.effect.popularity}${selected.effect.contenderOnWin ? ' · WIN REQUIRED: #1 CONTENDER' : ''}</small>` : ''}
     </div>`;
   }
@@ -584,7 +584,7 @@ function matchViewHtml() {
           const on = match.titleId === def.id;
           return `<button class="title-toggle ${on ? 'on' : ''}" data-bk="title" data-value="${on ? '' : def.id}">
             <span class="title-toggle-box">${on ? '✓' : ''}</span>
-            <span class="title-toggle-copy"><b>${def.name}</b><small>${t.holders.length ? `${holderNames.join(' & ')} defending` : 'Vacant — crown a new champion'}</small></span>
+            <span class="title-toggle-copy"><b>${booking.companyBrandedText(def.name)}</b><small>${t.holders.length ? `${holderNames.join(' & ')} defending` : 'Vacant — crown a new champion'}</small></span>
           </button>`;
         }).join('')}</section>` : ''}
 
@@ -711,7 +711,7 @@ function rosterViewHtml() {
         </button>`).join('')}
     </div>
     <div class="house-roster-detail">
-      ${candidate ? `<div class="house-roster-detail-main"><div><b>${candidate.name}</b><small>${candidate.style} · POP ${candidate.popularity} · STA ${booking.staminaFor(candidate.id)} · ${momentumLabel(candidate.momentum)}</small><p>${candidate.bio}</p></div></div>
+      ${candidate ? `<div class="house-roster-detail-main"><div><div class="house-roster-detail-heading"><b><button type="button" class="profile-link inline" data-profile="${candidate.id}" title="View wrestler profile">${candidate.name}</button></b><span class="house-roster-record">Record ${recordString(candidate.record)}</span></div><small>${candidate.style} · POP ${candidate.popularity} · STA ${booking.staminaFor(candidate.id)} · ${momentumLabel(candidate.momentum)}</small><p>${candidate.bio}</p></div></div>
       <div class="bk-taste"><span>STR ${candidate.stats.strength}</span><span>AGI ${candidate.stats.agility}</span><span>STA ${candidate.stats.stamina}</span><span>TECH ${candidate.stats.technique}</span><span>CHA ${candidate.stats.charisma}</span><span>TGH ${candidate.stats.toughness}</span></div>
       <button class="bk-primary" data-bk="roster-confirm">ADD TO MATCH</button>` : '<p class="bk-empty">Choose a wrestler to see their details.</p>'}
     </div>
@@ -771,7 +771,7 @@ function resultsViewHtml() {
           <li>
             <button data-bk="result-match" data-value="${result.matches.indexOf(m)}">
               ${matchPortraitsHtml(m.participantIds, 'poster-card-portraits')}
-              <span class="poster-slot">${m.label}${m.stakeId !== 'none' ? ` · ${m.stakeName}` : ''}</span>
+              <span class="poster-slot">${m.label}${m.stakeId !== 'none' ? ` · ${booking.companyBrandedText(m.stakeName)}` : ''}</span>
               <span class="poster-result">${outcomeLine(m)}</span>
               <span class="poster-meta">${m.typeName} · ${m.finish}</span>
               <span class="poster-rating"><em>${m.stars}</em><small>${m.rating}</small></span>
@@ -856,7 +856,7 @@ function yearEndRecapHtml() {
     <section class="year-section">
       <small class="bk-label">THE HIGHS</small>
       <div class="year-highlights">
-        ${awards.wrestlerOfSeason ? `<article><small>WRESTLER OF THE YEAR</small><b>${awards.wrestlerOfSeason.name}</b><p>${awards.wrestlerOfSeason.external ? `Signed elsewhere — ${awards.wrestlerOfSeason.origin}` : `${awards.wrestlerOfSeason.wins} wins in ${awards.wrestlerOfSeason.matches} matches`}</p></article>` : ''}
+        ${awards.wrestlerOfSeason ? `<article><small>WRESTLER OF THE YEAR</small><b>${awards.wrestlerOfSeason.name}</b><p>${awards.wrestlerOfSeason.external ? '(Signed to Rival\'s roster)' : `${awards.wrestlerOfSeason.wins} wins in ${awards.wrestlerOfSeason.matches} matches`}</p></article>` : ''}
         ${awards.matchOfSeason ? `<article><small>MATCH OF THE YEAR</small><b>${awards.matchOfSeason.names}</b><p>${awards.matchOfSeason.stars} · ${awards.matchOfSeason.show}</p></article>` : ''}
         ${awards.showOfSeason ? `<article><small>SHOW OF THE YEAR</small><b>${awards.showOfSeason.name}</b><p>${awards.showOfSeason.rating} rating · ${awards.showOfSeason.city}</p></article>` : ''}
       </div>
@@ -953,7 +953,7 @@ function agingHtml(changes) {
   const climbing = changes.filter(c => c.delta > 0).sort((a, b) => b.delta - a.delta).slice(0, 5);
   const slipping = changes.filter(c => c.delta < 0).sort((a, b) => a.delta - b.delta).slice(0, 5);
   if (!climbing.length && !slipping.length) return '';
-  const row = (entry, kind) => `<article class="trophy ${kind}"><span class="trophy-badge">${entry.delta > 0 ? '↑' : '↓'}</span><b>${entry.name}</b><small>Age ${entry.age} · ${entry.delta > 0 ? '+' : ''}${entry.delta} across the board</small></article>`;
+  const row = (entry, kind) => `<article class="trophy ${kind}"><span class="trophy-badge">${entry.delta > 0 ? '↑' : '↓'}</span><b>${entry.name}</b><small>Age ${entry.age} · ${entry.delta > 0 ? '+' : ''}${entry.delta} total across six attributes</small></article>`;
   return `<section class="poster-progress">
     <div class="poster-trophies">
       <small class="bk-label">ANOTHER YEAR ON THE BODY</small>
@@ -1200,7 +1200,7 @@ function resultMatchViewHtml() {
     ${backBar(m.label, `${result.showName} · ${result.date}`, 'results')}
     <div class="poster-sheet detail">
       <header class="poster-match-head">
-        <small>${m.typeName}${m.stakeId !== 'none' ? ` · ${m.stakeName}` : ''} · ${m.lengthName}</small>
+        <small>${m.typeName}${m.stakeId !== 'none' ? ` · ${booking.companyBrandedText(m.stakeName)}` : ''} · ${m.lengthName}</small>
         <h2>${m.sideNames.join(' vs. ')}</h2>
         <div class="poster-stars">${m.stars} <span>${m.rating} / 100 · projected ${m.projected}</span></div>
       </header>
@@ -1245,9 +1245,9 @@ export function championshipShrineHtml({ bookable = false } = {}) {
     ${booking.getTitles().map(({ def, state: title, status, holderNames }) => {
       const onCard = bookedTitles.has(def.id);
       return `<article class="belt ${status.state}" data-bk="belt-detail" data-value="${def.id}">
-        <div class="belt-plate"><img src="${BELT_IMAGES[def.id] ?? ''}" alt="${def.name}"></div>
+        <div class="belt-plate"><img src="${BELT_IMAGES[def.id] ?? ''}" alt="${booking.companyBrandedText(def.name)}"></div>
         <div class="belt-body">
-          <small>${def.name}</small>
+          <small>${booking.companyBrandedText(def.name)}</small>
           <b>${title.holders.length ? profileLinksHtml(title.holders) : 'VACANT'}</b>
           <div class="belt-meta">
             <span>${title.holders.length ? `Reign #${title.reignNumber} since ${title.since}` : 'No champion crowned'}</span>
@@ -1255,7 +1255,7 @@ export function championshipShrineHtml({ bookable = false } = {}) {
           </div>
           ${meter('Prestige', Math.round(title.prestige), 100, title.prestige < 45 ? 'bad' : '')}
           <div class="belt-status ${status.state}">${prestigeLabel(title.prestige)} · ${onCard ? 'ON THIS CARD' : status.label}</div>
-          <button class="belt-detail" data-bk="belt-detail" data-value="${def.id}">INSPECT BELT</button>
+          <button class="belt-detail" data-bk="belt-detail" data-value="${def.id}">View History</button>
           ${bookable && !onCard && titleBookable(def, show, title) ? `<button class="belt-book" data-bk="book-title" data-value="${def.id}">PUT IT ON THE CARD →</button>` : ''}
         </div>
       </article>`;
@@ -1268,6 +1268,19 @@ function titlesViewHtml() {
     ${backBar('Championships', 'Put the belt on someone, then decide when it gets defended.', 'card')}
     ${championshipShrineHtml({ bookable: true })}
   </div>`;
+}
+
+export function reignDaysHeld(reign, currentDate) {
+  const calendarDay = value => {
+    if (!value) return NaN;
+    const date = new Date(/^\d{4}-\d{2}-\d{2}$/.test(value ?? '') ? `${value}T12:00:00` : value);
+    return Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+  };
+  const from = calendarDay(reign.from);
+  const to = calendarDay(reign.to === 'PRESENT' ? currentDate : reign.to);
+  return Number.isFinite(from) && Number.isFinite(to)
+    ? Math.max(0, Math.round((to - from) / 86400000))
+    : Math.max(0, Number(reign.shows) || 0) * 30;
 }
 
 export function titleDetailViewHtml() {
@@ -1292,7 +1305,7 @@ export function titleDetailViewHtml() {
       <b>${holderNames.length ? holderNames.join(' & ') : 'VACANT'}</b>
       <p>${state.holders.length ? `Reign #${state.reignNumber} since ${state.since}. ${state.defenses} successful defence${state.defenses === 1 ? '' : 's'}.` : 'No champion has been crowned yet.'}</p>
       <small class="bk-label spaced">REIGN HISTORY · PAGE ${view.titleHistoryPage + 1} / ${pageCount}</small>
-      <div class="belt-history-table-wrap"><table class="belt-history-table"><thead><tr><th>REIGN</th><th>HOLDER</th><th>DATE WON</th><th>DATE LOST</th><th>SHOWS</th><th>DEFENCES</th><th>LOST TO</th></tr></thead><tbody>${pageRows.length ? pageRows.map(row => `<tr><td>${row.reignNumber ?? '—'}</td><td><b>${row.holderNames}</b></td><td>${row.from}</td><td>${row.to}</td><td>${row.shows}</td><td>${row.defenses}</td><td>${row.lostTo}</td></tr>`).join('') : '<tr><td colspan="7">No reigns recorded yet.</td></tr>'}</tbody></table></div>
+      <div class="belt-history-table-wrap"><table class="belt-history-table"><thead><tr><th>REIGN</th><th>HOLDER</th><th>DATE WON</th><th>DATE LOST</th><th>DAYS HELD</th><th>DEFENCES</th><th>LOST TO</th></tr></thead><tbody>${pageRows.length ? pageRows.map(row => `<tr><td>${row.reignNumber ?? '—'}</td><td><b>${row.holderNames}</b></td><td>${row.from}</td><td>${row.to}</td><td>${reignDaysHeld(row, booking.getState().date)}</td><td>${row.defenses}</td><td>${row.lostTo}</td></tr>`).join('') : '<tr><td colspan="7">No reigns recorded yet.</td></tr>'}</tbody></table></div>
       <div class="belt-history-pager"><button data-bk="title-history-page" data-value="-1" ${view.titleHistoryPage <= 0 ? 'disabled' : ''}>← PREVIOUS</button><span>${view.titleHistoryPage + 1} / ${pageCount}</span><button data-bk="title-history-page" data-value="1" ${view.titleHistoryPage >= pageCount - 1 ? 'disabled' : ''}>NEXT →</button></div>
       <button class="return-gallery" data-back="close">← RETURN</button>
     </article>
@@ -1305,15 +1318,16 @@ export function teamsViewHtml({ embedded = false } = {}) {
   return `<div class="bk terminal-teams-view">
     ${embedded ? '' : backBar('Tag Teams', '')}
     <small class="bk-label">${teams.length} SAVED DUOS</small>
-    <div class="bk-stack">
+    <div class="tag-team-list">
       ${teams.length ? teams.map(team => {
         const members = team.memberIds.map(id => getWrestlerById(id)?.name ?? id).join(' & ');
         const teamName = team.name.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
-        return `<article class="bk-history" data-team-row>
-          <header><b>${team.name}</b><span>${members} · ${team.chemistry}% chemistry · ${team.record.w}-${team.record.l}-${team.record.o}</span></header>
-          <div class="tag-duo-rename"><input class="bk-show-name" data-team-rename-input value="${teamName}" maxlength="32" aria-label="Team name"><button class="bk-chip" data-bk="team-rename" data-value="${team.id}">RENAME</button></div>
+        return `<article class="tag-team-row" data-team-row>
+          <div class="tag-team-name"><input data-team-rename-input value="${teamName}" maxlength="32" aria-label="Team name" title="Edit team name"><button type="button" data-bk="team-rename" data-value="${team.id}" title="Save team name" aria-label="Save team name">${createElement(Check, { width: 16, height: 16, 'aria-hidden': 'true' }).outerHTML}</button></div>
+          <span class="tag-team-members">${members}</span>
+          <span class="tag-team-record" title="Wins and losses">${team.record.w}-${team.record.l}</span>
         </article>`;
-      }).join('') : '<p class="bk-empty">No tag duos booked yet.</p>'}
+      }).join('') : '<p class="bk-empty">No tag teams have competed yet.</p>'}
     </div>
   </div>`;
 }
@@ -1326,7 +1340,7 @@ function titleReportHtml(result) {
     ${outcomes.map(o => `<article class="poster-title-line ${o.type}">
       <span class="poster-belt-tag">${o.type === 'change' ? 'NEW CHAMPION' : o.type === 'crowned' ? 'CROWNED' : 'RETAINED'}</span>
       <b>${o.newHolderNames || 'Vacant'}</b>
-      <small>${o.titleName}${o.reignNumber ? ` · reign #${o.reignNumber}` : ''}${o.defenses ? ` · defence #${o.defenses}` : ''}</small>
+      <small>${booking.companyBrandedText(o.titleName)}${o.reignNumber ? ` · reign #${o.reignNumber}` : ''}${o.defenses ? ` · defence #${o.defenses}` : ''}</small>
       <p>${o.note}</p>
     </article>`).join('')}
   </section>`;
@@ -1334,7 +1348,7 @@ function titleReportHtml(result) {
 
 function backBar(title, subtitle, target = 'card', buttonLabel = '← BACK') {
   return `<div class="bk-back">
-    <button class="${buttonLabel === '← BACK' ? '' : 'bk-save-back'}" data-bk="view" data-value="${target}">${buttonLabel}</button>
+    <button class="${buttonLabel === '← BACK' ? '' : 'bk-save-back'}" data-bk="view" data-value="${target}">${buttonLabel === 'SAVE & BACK' ? createElement(ArrowLeft, { width: 14, height: 14, 'aria-hidden': 'true' }).outerHTML : ''}${buttonLabel}</button>
     <div><b>${title}</b><small>${subtitle}</small></div>
   </div>`;
 }
@@ -1812,7 +1826,7 @@ function monthlyPlannerViewHtml() {
     </div>`;
   }
   const phases = [
-    { id: 'training', icon: DUMBBELL_ICON, name: 'Training', blurb: 'Choose 3 wrestlers to give extra training to develop their skills.', body: `<div class="monthly-training-controls"><small>Choose three wrestlers to develop</small><button type="button" class="bk-chip" data-bk="monthly-training-auto">AUTO SELECT</button></div><div class="monthly-choice-grid">${roster.map(w => `<button class="bk-option talent ${view.monthlyTrainingIds.includes(w.id) ? 'selected' : ''}" data-bk="monthly-trainer" data-value="${w.id}"><span class="bk-option-head"><b>${w.name}</b><em>${view.monthlyTrainingIds.includes(w.id) ? 'ON THE MACHINES' : ''}</em></span><span class="bk-option-meta">${w.style} · POP ${w.popularity} · STA ${booking.staminaFor(w.id)}</span></button>`).join('')}</div>` },
+    { id: 'training', icon: DUMBBELL_ICON, name: 'Training', blurb: 'Choose 3 wrestlers to give extra training to develop their skills.', body: `<div class="monthly-training-controls"><small>Choose three wrestlers to develop</small><button type="button" class="bk-chip" data-bk="monthly-training-auto">AUTO SELECT</button></div><div class="monthly-choice-grid">${roster.map(w => `<button class="bk-option talent ${view.monthlyTrainingIds.includes(w.id) ? 'selected' : ''}" data-bk="monthly-trainer" data-value="${w.id}"><span class="bk-option-head"><b>${w.name}</b><em>${view.monthlyTrainingIds.includes(w.id) ? 'ON THE MACHINES' : ''}</em></span><span class="bk-option-meta">STR ${w.stats.strength} · AGI ${w.stats.agility} · TECH ${w.stats.technique} · CHA ${w.stats.charisma} · TGH ${w.stats.toughness}</span></button>`).join('')}</div>` },
     { id: 'storyline', icon: 'MIC', name: 'Story Promo', blurb: 'Play one eligible Promo card for a booked match, boosting its hype and the spotlight wrestler.', body: micCardHtml() },
   ];
   const activePhase = phases.find(phase => phase.id === view.monthlyGuide) ?? phases[0];
@@ -1866,7 +1880,7 @@ function revealCardHtml(card, index, { revealed, action = null, clickAction = nu
     kindClass = 'card-title-belt';
     badge = 'Championship';
     art = `<div class="card-glyph belt"><img src="${BELT_IMAGES[card.id] ?? ''}" alt=""></div>`;
-    name = card.title?.name ?? 'Championship';
+    name = booking.companyBrandedText(card.title?.name ?? 'Championship');
     footL = card.title?.kind === 'tag' ? 'Tag team' : 'Singles';
     footR = 'VACANT';
   } else if (card.kind === 'promo') {
@@ -2442,11 +2456,12 @@ export function handleBookingEvent(event, { toast = () => {}, onShowRun = () => 
     case 'promo-card-skip': {
       const matchId = target.dataset.match;
       const wrestlerId = target.dataset.wrestler;
-      const selected = booking.getMatchPromoCard(matchId);
-      if (selected && !selected.played) booking.setMatchPromoCard(matchId, '', null);
+      const result = booking.runMonthlyPromoCardPhase(matchId, wrestlerId, { skip: true });
+      if (!result.ok) { toast(result.message); return true; }
       view.monthlySpotlightId = wrestlerId;
       view.monthlyPromoPick = { matchId, ownerId: wrestlerId, partnerId: micSelection()?.partnerId, skip: true };
-      toast('No Promo card selected.');
+      view.monthlyPhaseResult = result.result;
+      toast('Promo phase skipped. No cards were used.');
       return true;
     }
     case 'promo-card-clear': {
@@ -2512,7 +2527,7 @@ export function handleBookingEvent(event, { toast = () => {}, onShowRun = () => 
         const matchId = pick?.matchId ?? selection?.match.id;
         const spotlightId = pick?.ownerId ?? view.monthlySpotlightId;
         if (!spotlightId) { toast('Choose a wrestler to highlight.'); return true; }
-        const result = booking.runMonthlyPromoCardPhase(matchId, spotlightId);
+        const result = booking.runMonthlyPromoCardPhase(matchId, spotlightId, { skip: Boolean(pick?.skip) });
         if (!result.ok) { toast(result.message); return true; }
         view.monthlyPhaseResult = result.result;
         return true;
