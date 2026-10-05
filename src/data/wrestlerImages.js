@@ -24,6 +24,7 @@ const IMAGE_ALIASES = {
   'two-ton-tolliver': 'two-ton',
   'the-crab-man': 'cal-riffkin',
   'richard-pearl': 'dick-pearl',
+  'bam-bam-bigelow': 'bam-bam',
 };
 
 export function wrestlerImageUrl(wrestler) {
