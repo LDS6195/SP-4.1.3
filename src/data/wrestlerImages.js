@@ -22,6 +22,8 @@ const IMAGE_ALIASES = {
   'the-memphis-strangler': 'vanilla-gorilla',
   'minkus-hinton': 'nick-ubbs',
   'two-ton-tolliver': 'two-ton',
+  'the-crab-man': 'cal-riffkin',
+  'richard-pearl': 'dick-pearl',
 };
 
 export function wrestlerImageUrl(wrestler) {

@@ -2924,7 +2924,7 @@ function openPanel(kind) {
   panelFrame.classList.toggle('card-book-mode', kind === 'cardBook');
   panelFrame.classList.toggle('compact-picker', compactPicker);
   panelFrame.classList.toggle('no-footer', kind === 'calendar');
-  panelFrame.classList.toggle('calendar-wall', kind === 'calendar' && getBookingView() === 'calendar');
+  panelFrame.classList.toggle('calendar-wall', !packBreak && kind === 'calendar' && getBookingView() === 'calendar');
   panelFrame.classList.toggle('match-booking', ['booking', 'calendar'].includes(kind) && getBookingView() === 'match');
   panelFrame.classList.toggle('results-poster', ['booking', 'calendar'].includes(kind) && getBookingView() === 'results');
   panel.classList.toggle('computer-workspace', kind === 'computer');
