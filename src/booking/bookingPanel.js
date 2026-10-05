@@ -34,6 +34,7 @@ import { marketHypeForVenue, hypeTier, MARKET_LOCATIONS } from './marketHype.js'
 
 const view = { name: 'card', slot: null, titleId: null, titleHistoryPage: 0, rosterCandidate: null, resultIndex: 0, resultMatch: 0, storylinePartnerId: null, leadUpActivity: null, leadUpWrestler: null, lockerRoomAllocation: {}, promoWrestler: null, promoPartner: null, houseShow: null, housePick: null, houseCandidate: null, houseResult: null, teamMembers: [], teamName: '', monthlyTrainingIds: [], monthlySpotlightId: null, monthlyPromoPick: null, monthlyGuide: 'training', monthlyPhaseResult: null, packResult: null, packFlipped: [], annualOpened: false };
 const open = new Set();
+const teamSort = { key: 'w', dir: 'desc' };
 
 const HOUSE_SHOW_TYPES = ['singles', 'tag-team', 'triple-threat', 'submission', 'lumberjack'];
 
@@ -1011,7 +1012,7 @@ export function careerPlaqueHtml() {
           </section>
           <section class="legacy-leaderboard" aria-labelledby="legacy-wrestlers-heading">
             <header class="legacy-board-head"><h3 id="legacy-wrestlers-heading">TOP 5 WRESTLERS</h3><small>CAREER ACCUMULATED STARS${c.wrestlerHistoryIncomplete ? ' / TRACKED HISTORY' : ''}</small></header>
-            <ol class="legacy-wrestlers">${leaders.map(({ wrestler, stars }, index) => `<li><span class="legacy-rank">${String(index + 1).padStart(2, '0')}</span>${wrestlerPortraitHtml(wrestler, 'legacy-portrait')}<div class="legacy-wrestler-copy"><b>${escape(wrestler.name)}</b><small>RECORD ${wrestler.record.w.toLocaleString()}-${wrestler.record.l.toLocaleString()}-${wrestler.record.o.toLocaleString()}</small></div><div class="legacy-star-total"><b>${Number(stars.toFixed(1)).toLocaleString()} <span>&#9733;</span></b><small>CAREER STARS</small></div></li>`).join('')}${placeholders(leaders.length)}</ol>
+            <ol class="legacy-wrestlers">${leaders.map(({ wrestler, stars }, index) => `<li><span class="legacy-rank">${String(index + 1).padStart(2, '0')}</span>${wrestlerPortraitHtml(wrestler, 'legacy-portrait')}<div class="legacy-wrestler-copy"><b>${escape(wrestler.name)}</b><small>RECORD ${wrestler.record.w.toLocaleString()}-${wrestler.record.l.toLocaleString()}</small></div><div class="legacy-star-total"><b>${Number(stars.toFixed(1)).toLocaleString()} <span>&#9733;</span></b><small>CAREER STARS</small></div></li>`).join('')}${placeholders(leaders.length)}</ol>
           </section>
           <section class="legacy-leaderboard legacy-ppvs" aria-labelledby="legacy-ppvs-heading">
             <header class="legacy-board-head"><h3 id="legacy-ppvs-heading">TOP 5 PPVS</h3><small>ALL-TIME SHOW STAR RATING / 5</small></header>
@@ -1080,7 +1081,7 @@ export function trophyCaseHtml() {
           <b>${m.name}${m.nickname ? ` "${m.nickname}"` : ''}</b>
           <span>${m.hometown} · ${m.style} · ${m.cause} · ${m.date}</span>
           <p>${m.message}</p>
-          <small>Final record ${m.finalRecord.w}-${m.finalRecord.l}-${m.finalRecord.o} · ${m.popularity} popularity at the time</small>
+          <small>Final record ${m.finalRecord.w}-${m.finalRecord.l} · ${m.popularity} popularity at the time</small>
         </div>
       </article>`).join('')}
     </div>` : ''}
@@ -1138,7 +1139,7 @@ export function recordBookHtml() {
     <div class="bk-stack">
       ${retirees.map(r => `<article class="bk-history">
         <header><b>${r.name}</b><span>Retired at ${r.age} · ${r.date ?? ''}</span></header>
-        <p>Final record ${r.finalRecord.w}-${r.finalRecord.l}-${r.finalRecord.o}${r.reason ? ` · ${r.reason}` : ''}</p>
+        <p>Final record ${r.finalRecord.w}-${r.finalRecord.l}${r.reason ? ` · ${r.reason}` : ''}</p>
       </article>`).join('')}
     </div>` : ''}`;
 }
@@ -1313,21 +1314,31 @@ export function titleDetailViewHtml() {
 }
 
 export function teamsViewHtml({ embedded = false } = {}) {
-  const teams = booking.getTeams();
+  const teams = [...booking.getTeams()].sort((first, second) =>
+    (first.record[teamSort.key] - second.record[teamSort.key]) * (teamSort.dir === 'asc' ? 1 : -1)
+      || first.name.localeCompare(second.name));
+  const recordHeader = (key, label) => {
+    const active = teamSort.key === key;
+    const direction = active ? teamSort.dir === 'asc' ? 'ascending' : 'descending' : 'none';
+    return `<th scope="col" aria-sort="${direction}"><button type="button" class="tag-team-sort ${active ? 'active' : ''}" data-bk="team-sort" data-value="${key}" title="Sort by ${label.toLowerCase()}">${label}<span aria-hidden="true">${active ? teamSort.dir === 'asc' ? '&#9650;' : '&#9660;' : '&#8597;'}</span></button></th>`;
+  };
 
   return `<div class="bk terminal-teams-view">
     ${embedded ? '' : backBar('Tag Teams', '')}
     <small class="bk-label">${teams.length} SAVED DUOS</small>
     <div class="tag-team-list">
+      <table class="tag-team-table"><thead><tr><th scope="col">TEAM NAME</th><th scope="col">MEMBERS</th>${recordHeader('w', 'WINS')}${recordHeader('l', 'LOSSES')}</tr></thead><tbody>
       ${teams.length ? teams.map(team => {
         const members = team.memberIds.map(id => getWrestlerById(id)?.name ?? id).join(' & ');
         const teamName = team.name.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
-        return `<article class="tag-team-row" data-team-row>
-          <div class="tag-team-name"><input data-team-rename-input value="${teamName}" maxlength="32" aria-label="Team name" title="Edit team name"><button type="button" data-bk="team-rename" data-value="${team.id}" title="Save team name" aria-label="Save team name">${createElement(Check, { width: 16, height: 16, 'aria-hidden': 'true' }).outerHTML}</button></div>
-          <span class="tag-team-members">${members}</span>
-          <span class="tag-team-record" title="Wins and losses">${team.record.w}-${team.record.l}</span>
-        </article>`;
-      }).join('') : '<p class="bk-empty">No tag teams have competed yet.</p>'}
+        return `<tr class="tag-team-row" data-team-row>
+          <td><div class="tag-team-name"><input data-team-rename-input value="${teamName}" maxlength="32" aria-label="Team name" title="Edit team name"><button type="button" data-bk="team-rename" data-value="${team.id}" title="Save team name" aria-label="Save team name">${createElement(Check, { width: 16, height: 16, 'aria-hidden': 'true' }).outerHTML}</button></div></td>
+          <td class="tag-team-members">${members}</td>
+          <td class="tag-team-record">${team.record.w}</td>
+          <td class="tag-team-record">${team.record.l}</td>
+        </tr>`;
+      }).join('') : '<tr><td colspan="4" class="bk-empty">No tag teams have competed yet.</td></tr>'}
+      </tbody></table>
     </div>
   </div>`;
 }
@@ -1630,7 +1641,6 @@ function calendarProgress() {
     book: 1,
     training: ppvDay - 20,
     promo: ppvDay - 13,
-    rest: ppvDay - 6,
     event: event ? ppvDay + event.offset : null,
     ppv: ppvDay,
   };
@@ -1659,13 +1669,13 @@ function calendarViewHtml() {
   const monthLabel = new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' }).format(currentMonthDate);
   const monthStart = new Date(monthYear, monthIndex, 1);
   const monthEnd = new Date(monthYear, monthIndex + 1, 0);
-  const firstDayOffset = (monthStart.getDay() + 6) % 7;
+  const firstDayOffset = monthStart.getDay();
   const totalDays = monthEnd.getDate();
-  const weekdayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const weekdayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const progress = calendarProgress();
   const { days, stage } = progress;
   const ppvDay = days.ppv;
-  const phaseDays = [days.training, days.promo, days.rest];
+  const phaseDays = [days.training, days.promo];
 
   // Days already lived stay crossed off; anything newly lived since the last render animates.
   const advanceTo = view.calendarAdvance?.key === progress.monthKey ? view.calendarAdvance.to : 0;
@@ -1682,7 +1692,7 @@ function calendarViewHtml() {
     const slot = phase + 1;
     cells.push({
       blank: false, day, ppv: isPpv, book: day === 1 && !isPpv, slot: phase >= 0 ? slot : 0,
-      phase: phase >= 0 ? ['TRAINING', 'STORY PROMO', 'REST'][phase] : null,
+      phase: phase >= 0 ? ['Train', 'Promo'][phase] : null,
       event: day === days.event && !isPpv && phase < 0,
       passed: day <= passedUpTo,
       passingDelay: day > animateFrom && day <= passedUpTo ? (day - animateFrom - 1) * 70 : null,
@@ -1703,28 +1713,18 @@ function calendarViewHtml() {
   const clickable = cell => cell.slot || cell.ppv || cell.book || cell.event;
   const nextStage = CALENDAR_STAGES[stage];
 
-  return `<div class="bk calendar-compact">
-    <div class="calendar-month-header" style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; padding:8px 12px; border:1px solid #514c48; background:#202023;">
-      <div>
-        <small class="bk-label">MONTH PLAN</small>
-        <b style="display:block; margin-top:2px; font:700 24px/1 'Barlow Condensed', sans-serif; letter-spacing:.04em; text-transform:uppercase;">${monthLabel}</b>
-      </div>
-      <div style="text-align:right; color:#c7c0b7; font:500 11px 'DM Mono', monospace; letter-spacing:.08em; text-transform:uppercase;">
-        <div>Show ${state.showNumber}</div>
-        <div style="margin-top:3px; color:var(--gold);">${show.name}</div>
-      </div>
-      <button class="calendar-customize" data-bk="view" data-value="ppv-customize">
-        <span>PPV BRANDING</span><b>CUSTOMIZE PPVS</b><small>NAMES · LOGOS · COLORS</small>
-      </button>
+  return `<div class="bk calendar-compact calendar-paper">
+    <div class="calendar-month-header">
+      <b>${monthLabel}</b>
+      <span class="calendar-show-note">${show.name} · Show ${state.showNumber}</span>
     </div>
     <div class="calendar-grid">
-      ${weekdayLabels.map(label => `<div style="padding:5px 6px; border:1px solid #514c48; background:#1c1c1e; color:var(--gold); font:500 10px 'DM Mono', monospace; letter-spacing:.09em; text-transform:uppercase; text-align:center;">${label}</div>`).join('')}
+      ${weekdayLabels.map(label => `<div class="calendar-weekday">${label}</div>`).join('')}
       ${cells.map(cell => cell.blank
-        ? '<div style="min-height:58px; border:1px solid #383532; background:#171718; opacity:.6;"></div>'
-        : `<${clickable(cell) ? 'button' : 'div'} ${cell.ppv || cell.book ? 'type="button" data-bk="view" data-value="card"' : cell.slot ? 'type="button" data-bk="view" data-value="leadup"' : cell.event ? 'type="button" data-bk="calendar-event"' : ''} class="${cellClass(cell)}" style="${cell.passingDelay !== null ? `--pass-delay:${cell.passingDelay}ms;` : ''}min-height:58px; padding:5px 7px 4px; border:1px solid ${cell.ppv ? '#f1c85d' : cell.book ? '#4f7fbf' : cell.slot ? '#977033' : cell.event ? '#8a5fc4' : '#393735'}; background:${cell.ppv ? '#f1c85d' : cell.book ? '#1f3a63' : cell.slot ? '#252220' : cell.event ? '#241c30' : '#1b1b1d'}; color:${cell.ppv ? '#241a04' : cell.book ? '#eaf2fc' : '#e5ded0'}; display:flex; flex-direction:column; justify-content:space-between;">
-          <small style="color:${cell.ppv ? '#4a3406' : cell.book ? '#9dbde6' : cell.slot ? '#dfb961' : cell.event ? '#c7a6f0' : '#79746b'}; font:600 9px 'DM Mono', monospace; letter-spacing:.06em; text-transform:uppercase;">${cell.ppv ? 'PPV' : cell.book ? 'BOOK CARD' : cell.event ? 'RANDOM EVENT' : cell.phase ?? ''}</small>
-            <b style="margin:0; font:600 17px/1 'Barlow Condensed', sans-serif; letter-spacing:.04em;">${cell.day}</b>
-            ${cell.ppv ? `<span style="font:600 9px 'DM Mono', monospace; letter-spacing:.04em; text-transform:uppercase; color:#241a04; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${show.name}</span>` : cell.book ? '<span style="font:600 9px \'DM Mono\', monospace; letter-spacing:.04em; text-transform:uppercase; color:#cfe0f7;">SET THE MATCHES</span>' : cell.event ? '<span class="day-activity">?</span>' : cell.phase ? '<span class="day-activity">PHASE</span>' : ''}
+        ? '<div class="calendar-blank" aria-hidden="true"></div>'
+        : `<${clickable(cell) ? 'button' : 'div'} ${cell.ppv || cell.book ? 'type="button" data-bk="view" data-value="card"' : cell.slot ? 'type="button" data-bk="view" data-value="leadup"' : cell.event ? 'type="button" data-bk="calendar-event"' : ''} class="${cellClass(cell)}" style="--marker-tilt:${cell.day % 2 ? -8 : 6}deg;${cell.passingDelay !== null ? `--pass-delay:${cell.passingDelay}ms;` : ''}">
+            <span class="calendar-date${clickable(cell) ? ' calendar-date-marked' : ''}"><b>${cell.day}</b></span>
+            ${clickable(cell) ? `<span class="calendar-hand-note">${cell.ppv ? show.name : cell.book ? 'Book the card' : cell.event ? 'Event' : cell.phase === 'Train' ? 'Training' : 'Promo prep'}</span>` : ''}
           </${clickable(cell) ? 'button' : 'div'}>`).join('')}
     </div>
     <div class="calendar-next-row">
@@ -1732,6 +1732,7 @@ function calendarViewHtml() {
       <button class="calendar-next-action" type="button" data-bk="calendar-advance" ${view.calendarAdvancing ? 'disabled' : ''}>
         ADVANCE TO ${nextStage.label} →
       </button>
+      <button class="calendar-customize" data-bk="view" data-value="ppv-customize">Customize PPVs</button>
     </div>
   </div>`;
 }
@@ -2328,6 +2329,11 @@ export function handleBookingEvent(event, { toast = () => {}, onShowRun = () => 
       return true;
     case 'title-history-page':
       view.titleHistoryPage = Math.max(0, view.titleHistoryPage + Number(value));
+      return true;
+    case 'team-sort':
+      if (!['w', 'l'].includes(value)) return false;
+      teamSort.dir = teamSort.key === value && teamSort.dir === 'desc' ? 'asc' : 'desc';
+      teamSort.key = value;
       return true;
     case 'team-rename': {
       const name = target.closest('[data-team-row]')?.querySelector('[data-team-rename-input]')?.value ?? '';

@@ -1782,12 +1782,13 @@ export const wrestlers = [
 
 // Every new promotion begins with a clean record book; only matches run by the player count.
 wrestlers.forEach(wrestler => {
-  wrestler.record = { w: 0, l: 0, o: 0 };
+  wrestler.record = { w: 0, l: 0 };
   wrestler.streak = { type: 'none', count: 0 };
   if (getDraftTier(wrestler) === 'jobber') {
     Object.keys(wrestler.stats).forEach(stat => {
-      wrestler.stats[stat] = Math.min(99, wrestler.stats[stat] + 10);
+      wrestler.stats[stat] = Math.min(99, wrestler.stats[stat] + 7);
     });
+    wrestler.popularity = Math.min(100, wrestler.popularity + 6);
   }
 });
 
@@ -1869,7 +1870,7 @@ export function createCustomWrestler(data, id, date = GAME_START_DATE) {
     hidden: { ego: 50, workEthic: 65, riskTolerance: 50, lockerRoomImpact: 50 },
     chemistryTags: [], bestChemistryWith: [], poorChemistryWith: [],
     popularity: 45, momentum: 0,
-    streak: { type: 'none', count: 0 }, record: { w: 0, l: 0, o: 0 },
+    streak: { type: 'none', count: 0 }, record: { w: 0, l: 0 },
   };
 }
 
@@ -1883,7 +1884,7 @@ export function calculateAge(dob, asOf = GAME_START_DATE) {
 }
 
 export function recordString(record) {
-  return `${record.w}-${record.l}-${record.o}`;
+  return `${record.w}-${record.l}`;
 }
 
 export function momentumLabel(momentum) {

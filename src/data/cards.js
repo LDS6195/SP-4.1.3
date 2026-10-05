@@ -212,7 +212,7 @@ export const CRIB_PACKS = {
   match: { id: 'match', name: 'Match Pack', blurb: '3 match cards.', cost: 91000, gimmicks: 3, promos: 0, wrestlers: 0, color: '#cf493e' },
   promo: { id: 'promo', name: 'Promo Pack', blurb: '3 Promo cards.', cost: 91000, gimmicks: 0, promos: 3, wrestlers: 0, color: '#259b82' },
   'free-agent': { id: 'free-agent', name: 'Free Agent Pack', blurb: '1 wrestler, 1 match card, and 1 Promo card.', cost: 338000, gimmicks: 1, promos: 1, wrestlers: 1, wrestlerTierWeights: { legend: 23, star: 32, contender: 40, jobber: 5 }, color: '#397fca' },
-  'custom-wrestler': { id: 'custom-wrestler', name: 'Create Your Own Wrestler Pack', blurb: '1 custom wrestler, 1 Match card, and 1 Promo card.', cost: 338000, gimmicks: 1, promos: 1, wrestlers: 1, customWrestler: true, color: '#c66792' },
+  'custom-wrestler': { id: 'custom-wrestler', name: 'Create Your Own Wrestler Pack', blurb: '1 custom wrestler, 1 Match card, and 1 Promo card.', cost: 400000, gimmicks: 1, promos: 1, wrestlers: 1, customWrestler: true, color: '#c66792' },
   variety: { id: 'variety', name: 'Variety Pack', blurb: '2 match cards and 2 Promo cards.', cost: 130000, gimmicks: 2, promos: 2, wrestlers: 0, color: '#c59b31' },
 };
 

@@ -313,10 +313,10 @@ export function simulateMatch(match, projection, context = {}) {
       const battleRoyaleEarlyEliminated = isBattleRoyale && groupIndex >= Math.max(1, scored.length - 2);
       let popDelta = Math.round((finalRating - 58) / 12);
       let momentumDelta = 0;
-      let resultCode = 'O';
+      let resultCode = 'N';
 
       if (draw) {
-        resultCode = 'O';
+        resultCode = 'N';
       } else if (won) {
         resultCode = 'W';
         popDelta += 2 + (upset ? 4 : 0);
@@ -333,7 +333,7 @@ export function simulateMatch(match, projection, context = {}) {
           momentumDelta += 1;
         }
       } else if (battleRoyaleEarlyEliminated) {
-        resultCode = groupIndex === scored.length - 1 ? 'O' : 'N';
+        resultCode = 'N';
         popDelta = -3;
         momentumDelta = -1;
       } else if (isBattleRoyale && multiLoss) {
@@ -341,7 +341,7 @@ export function simulateMatch(match, projection, context = {}) {
         popDelta = 4 + Math.max(0, Math.round((finalRating - 60) / 20));
         momentumDelta = 1;
       } else if (multiLoss) {
-        resultCode = 'O';
+        resultCode = 'L';
         momentumDelta = finalRating >= 75 ? 0 : -1;
       } else {
         resultCode = 'L';

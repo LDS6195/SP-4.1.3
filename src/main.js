@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 import skylineUrl from '../images/skyline4.jpg?url';
 import catalogUrl from '../images/catalog.jpg?url';
@@ -8,10 +9,16 @@ import daliUrl from '../images/dali.jpg?url';
 import rothkoUrl from '../images/rothko.jpg?url';
 import goyaUrl from '../images/goya.jpg?url';
 import brickUrl from '../images/wallpaper/brick.jpg?url';
+import bookingBrickUrl from '../images/wallpaper/brick2.jpg?url';
 import rusticWallpaperUrl from '../images/wallpaper/rustic.jpg?url';
+import woodWallpaperUrl from '../images/wallpaper/wood.jpg?url';
 import wallpaperUrl from '../images/wallpaper/wallpaper1.jpg?url';
 import rugUrl from '../images/wallpaper/rug.jpg?url';
 import windows95Url from '../images/wallpaper/windows95.jpg?url';
+import poster1Url from '../images/wallpaper/poster1.jpg?url';
+import poster2Url from '../images/wallpaper/poster2.jpg?url';
+import poster3Url from '../images/wallpaper/poster3.jpg?url';
+import magazineUrl from '../images/wallpaper/magazine2.jpg?url';
 import wall2Url from '../images/wallpaper/wall2.jpg?url';
 import ticketsUrl from '../images/wallpaper/tickets.png?url';
 import worldChampBeltUrl from '../images/world-champ-belt.png?url';
@@ -43,7 +50,7 @@ import { worldNewsForDate } from './data/worldNews.js';
 import { VINYL_RECORDS, vinylCoverUrl, getVinylRecord } from './data/vinyls.js';
 import { createVendingMachine } from './lounge/vendingMachine.js';
 import { createCardBook } from './lounge/cardBook.js';
-import { createCompanyEmblem, createWallPainting, createFinanceDeskProps, disposeOfficeDisplay } from './lounge/officeDisplay.js';
+import { createCompanyEmblem, createWallPainting, createFinanceDeskProps, createCompanyMugTexture, createRetroComputerTexture, createWrestlingFigure, createLavaLamp, updateLavaLamp, createLoungeSurfaceTexture, createLoungeChair, disposeOfficeDisplay } from './lounge/officeDisplay.js';
 
 let vinylGrooveTexture = null;
 function grooveTexture() {
@@ -124,12 +131,13 @@ const clock = new THREE.Clock();
 const targetPosition = new THREE.Vector3();
 const targetLookAt = new THREE.Vector3();
 const currentLookAt = new THREE.Vector3();
+const cameraTargetRotation = new THREE.Matrix4();
+const cameraTargetQuaternion = new THREE.Quaternion();
 let started = false;
 let panelOpen = false;
 let station = 0;
 let currentPanelKind = null;
-let calendarHeaderSign = null;
-const calendarCells = [];
+let calendarSheet = null;
 let bookingBoardSign = null;
 let bookingPosterMesh = null;
 let bookingPosterAsset = null;
@@ -180,6 +188,32 @@ function patternedTexture(base, detail, lines = 50) {
   return texture;
 }
 
+function flutedWoodTexture() {
+  const textureCanvas = document.createElement('canvas');
+  textureCanvas.width = 384;
+  textureCanvas.height = 512;
+  const context = textureCanvas.getContext('2d');
+  context.fillStyle = '#241711';
+  context.fillRect(0, 0, textureCanvas.width, textureCanvas.height);
+  for (let x = 0; x < textureCanvas.width; x += 16) {
+    const slat = context.createLinearGradient(x, 0, x + 16, 0);
+    slat.addColorStop(0, '#281a13');
+    slat.addColorStop(.18, '#68432b');
+    slat.addColorStop(.42, '#9a6841');
+    slat.addColorStop(.72, '#70492f');
+    slat.addColorStop(1, '#21140f');
+    context.fillStyle = slat;
+    context.fillRect(x, 0, 16, textureCanvas.height);
+    context.fillStyle = 'rgba(238, 188, 123, .16)';
+    context.fillRect(x + 3, 0, 1, textureCanvas.height);
+    context.fillStyle = 'rgba(10, 6, 4, .48)';
+    context.fillRect(x + 14, 0, 2, textureCanvas.height);
+  }
+  const texture = new THREE.CanvasTexture(textureCanvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
 function rugTexture() {
   const textureCanvas = document.createElement('canvas');
   textureCanvas.width = textureCanvas.height = 512;
@@ -208,6 +242,26 @@ function imageTexture(url, repeatX = 1, repeatY = 1) {
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
   texture.repeat.set(repeatX, repeatY);
+  return texture;
+}
+
+function officeCarpetTexture() {
+  const carpet = document.createElement('canvas');
+  carpet.width = carpet.height = 256;
+  const context = carpet.getContext('2d');
+  const pixels = context.createImageData(256, 256);
+  for (let index = 0; index < pixels.data.length; index += 4) {
+    const grain = ((Math.imul(index + 1, 1664525) + 1013904223) >>> 16) % 25 - 12;
+    pixels.data[index] = 96 + grain;
+    pixels.data[index + 1] = 28 + grain;
+    pixels.data[index + 2] = 43 + grain;
+    pixels.data[index + 3] = 255;
+  }
+  context.putImageData(pixels, 0, 0);
+  const texture = new THREE.CanvasTexture(carpet);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(6.3, 14.5);
   return texture;
 }
 
@@ -270,13 +324,23 @@ const materials = {
   burgundy: new THREE.MeshStandardMaterial({ color: 0x391719, roughness: .78 }),
   glass: new THREE.MeshPhysicalMaterial({ color: 0xeaf0ee, transparent: true, opacity: .1, roughness: .05, depthWrite: false }),
   walnutGrain: new THREE.MeshStandardMaterial({ map: patternedTexture('#2b1b16', '#80513b', 85), roughness: .58, metalness: .08 }),
+  deskWood: new THREE.MeshStandardMaterial({ color: '#4b3026', roughness: .65, metalness: 0 }),
+  officeCarpet: (() => {
+    const texture = officeCarpetTexture();
+    return new THREE.MeshStandardMaterial({ map: texture, bumpMap: texture, bumpScale: .008, roughness: 1, metalness: 0 });
+  })(),
   marble: new THREE.MeshStandardMaterial({ map: patternedTexture('#d7d0bf', '#8e8b81', 38), roughness: .36, metalness: .05 }),
   modernWhite: new THREE.MeshStandardMaterial({ color: 0xe7e4dc, roughness: .82, metalness: .03 }),
   legacySilver: new THREE.MeshStandardMaterial({ color: 0xb8bec4, roughness: .55, metalness: .3 }),
   wallpaper: new THREE.MeshStandardMaterial({ map: imageTexture(wallpaperUrl, 6, 2), roughness: .88, metalness: .02 }),
   rusticWallpaper: new THREE.MeshStandardMaterial({ map: imageTexture(rusticWallpaperUrl, 5, 2), roughness: .9, metalness: .02 }),
+  officeWood: new THREE.MeshStandardMaterial({ map: imageTexture(woodWallpaperUrl, 3, 2), roughness: .9, metalness: .02 }),
   bookingWallpaper: new THREE.MeshStandardMaterial({ map: imageTexture(wall2Url, 3, 2), roughness: .9, metalness: .02 }),
   bookingWall: new THREE.MeshStandardMaterial({ map: patternedTexture('#e6e0d5', '#c7bfb2', 22), roughness: .92, metalness: 0 }),
+  trophyWall: (() => {
+    const texture = patternedTexture('#27282c', '#313236', 85);
+    return new THREE.MeshStandardMaterial({ map: texture, bumpMap: texture, bumpScale: .003, roughness: .92, metalness: 0 });
+  })(),
   bulletinBoard: new THREE.MeshStandardMaterial({ color: 0xd4b67a, roughness: .94, metalness: 0 }),
   brick: new THREE.MeshStandardMaterial({ map: imageTexture(brickUrl, 7, 3), roughness: .96, metalness: 0 }),
   blackBrick: new THREE.MeshStandardMaterial({ map: imageTexture(brickUrl, 4, 3), color: 0x242321, roughness: .98, metalness: 0 }),
@@ -310,11 +374,118 @@ function textTexture(lines, colors = {}, aspect = 2) {
   const scale = 2;
   lines.forEach((line, index) => {
     context.fillStyle = index === 0 ? (colors.accent || '#d8a847') : (colors.text || '#ede5d3');
-    context.font = `${index === 0 ? '700 72px' : '600 48px'} sans-serif`;
+    let fontSize = colors.compact ? Math.min(160, 340 / lines.length) : index === 0 ? 72 : 48;
+    const fontWeight = index === 0 ? 700 : 600;
+    context.font = `${fontWeight} ${fontSize}px sans-serif`;
+    while (colors.compact && fontSize > 24 && context.measureText(line).width > textureCanvas.width - 64) {
+      fontSize -= 2;
+      context.font = `${fontWeight} ${fontSize}px sans-serif`;
+    }
     context.textAlign = 'center';
-    context.fillText(line, textureCanvas.width / 2, (68 + index * 47) * scale);
+    context.textBaseline = colors.compact ? 'middle' : 'alphabetic';
+    context.fillText(line, textureCanvas.width / 2, colors.compact ? (index + .5) * textureCanvas.height / lines.length : (68 + index * 47) * scale);
   });
   const texture = new THREE.CanvasTexture(textureCanvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+function calendarWallTexture(state, show, leadUp) {
+  const sheet = document.createElement('canvas');
+  sheet.width = 1600;
+  sheet.height = 1280;
+  const context = sheet.getContext('2d');
+  const width = sheet.width;
+  const date = new Date(`${state.date}T12:00:00`);
+  const offset = new Date(date.getFullYear(), date.getMonth(), 1).getDay();
+  const days = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+  const rows = Math.ceil((offset + days) / 7);
+  const ppvDay = new Date(`${show.date || state.date}T12:00:00`).getDate();
+  const eventDay = leadUp.randomEvent ? ppvDay + leadUp.randomEvent.offset : null;
+  const paper = context.createLinearGradient(0, 0, width, 0);
+  paper.addColorStop(0, '#f0e9d6');
+  paper.addColorStop(1, '#e1d8b9');
+  context.fillStyle = paper;
+  context.fillRect(0, 0, width, sheet.height);
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+  context.fillStyle = '#294359';
+  context.font = "700 76px 'Barlow Condensed', sans-serif";
+  context.fillText(date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }).toUpperCase(), width / 2, 92);
+  context.fillStyle = '#345265';
+  context.font = "28px 'Permanent Marker', cursive";
+  let subtitleSize = 28;
+  const subtitle = `${show.name} · Show ${state.showNumber}`;
+  while (subtitleSize > 14 && context.measureText(subtitle).width > width - 100) {
+    subtitleSize -= 1;
+    context.font = `${subtitleSize}px 'Permanent Marker', cursive`;
+  }
+  context.fillText(subtitle, width / 2, 157);
+  const left = 38;
+  const top = 248;
+  const cellWidth = (width - left * 2) / 7;
+  const cellHeight = (sheet.height - top - 38) / rows;
+  context.font = "24px 'Barlow Condensed', sans-serif";
+  ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].forEach((weekday, column) => {
+    context.fillStyle = column === 0 ? '#963c34' : '#514832';
+    context.fillText(weekday, left + (column + .5) * cellWidth, top - 25);
+  });
+  context.strokeStyle = '#b5a886';
+  context.lineWidth = 2;
+  for (let column = 0; column <= 7; column += 1) {
+    context.beginPath();
+    context.moveTo(left + column * cellWidth, top - 50);
+    context.lineTo(left + column * cellWidth, sheet.height - 38);
+    context.stroke();
+  }
+  for (let row = 0; row <= rows; row += 1) {
+    context.beginPath();
+    context.moveTo(left, top + row * cellHeight);
+    context.lineTo(width - left, top + row * cellHeight);
+    context.stroke();
+  }
+  context.strokeRect(left, top - 50, width - left * 2, 50);
+  for (let day = 1; day <= days; day += 1) {
+    const index = offset + day - 1;
+    const x = left + index % 7 * cellWidth;
+    const y = top + Math.floor(index / 7) * cellHeight;
+    const note = day === ppvDay ? show.name : day === ppvDay - 20 ? 'Training'
+      : day === ppvDay - 13 ? 'Promo prep' : day === eventDay ? 'Event' : day === 1 ? 'Book the card' : null;
+    context.fillStyle = '#514832';
+    context.textAlign = 'center';
+    context.font = '32px Georgia, serif';
+    context.fillText(String(day), x + 38, y + 38);
+    if (!note) continue;
+    const ink = day === ppvDay ? '#963c34' : '#345265';
+    context.strokeStyle = ink;
+    context.lineWidth = 3;
+    context.lineCap = 'round';
+    context.beginPath();
+    for (let step = 0; step <= 80; step += 1) {
+      const angle = step / 80 * Math.PI * 2.07;
+      const wobble = 1 + .045 * Math.sin(angle * 3 + day) + .025 * Math.cos(angle * 5 + day);
+      const markerX = x + 38 + Math.cos(angle) * 31 * wobble;
+      const markerY = y + 38 + Math.sin(angle) * 23 * wobble + Math.cos(angle) * (day % 2 ? -4 : 3);
+      if (step === 0) context.moveTo(markerX, markerY);
+      else context.lineTo(markerX, markerY);
+    }
+    context.stroke();
+    context.fillStyle = ink;
+    context.textAlign = 'left';
+    context.font = "24px 'Permanent Marker', cursive";
+    let line = '';
+    let noteY = y + 84;
+    for (const word of note.split(/\s+/)) {
+      const candidate = line ? `${line} ${word}` : word;
+      if (line && context.measureText(candidate).width > cellWidth - 28) {
+        context.fillText(line, x + 15, noteY);
+        noteY += 30;
+        line = word;
+      } else line = candidate;
+    }
+    context.fillText(line, x + 15, noteY);
+  }
+  const texture = new THREE.CanvasTexture(sheet);
   texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
 }
@@ -478,7 +649,7 @@ function addImageWall(url, width, height, x, y, z, rotationY, { preserveAspect =
   scene.add(mesh);
 }
 
-function addWindowGlass(width, height, x, y, z, rotationY) {
+function addWindowGlass(width, height, x, y, z, rotationY, { roomReflections = false } = {}) {
   const reflectionCanvas = document.createElement('canvas');
   reflectionCanvas.width = 1024;
   reflectionCanvas.height = 512;
@@ -495,13 +666,39 @@ function addWindowGlass(width, height, x, y, z, rotationY) {
     context.fillRect(-110, -620, 220, 1240);
     context.restore();
   }
+  if (roomReflections) {
+    context.save();
+    context.shadowBlur = 12;
+    context.shadowColor = 'rgba(117,205,172,.15)';
+    context.fillStyle = 'rgba(122,181,155,.065)';
+    context.fillRect(76, 218, 128, 230);
+    context.strokeStyle = 'rgba(210,234,219,.14)';
+    context.lineWidth = 3;
+    context.strokeRect(88, 240, 104, 158);
+    for (let row = 0; row < 6; row += 1) {
+      context.fillStyle = 'rgba(189,216,202,.10)';
+      context.fillRect(92, 264 + row * 21, 95, 3);
+    }
+    context.shadowColor = 'rgba(255,217,163,.2)';
+    context.fillStyle = 'rgba(255,224,181,.13)';
+    context.beginPath();
+    context.moveTo(851, 323);
+    context.lineTo(886, 306);
+    context.lineTo(922, 323);
+    context.closePath();
+    context.fill();
+    context.fillStyle = 'rgba(233,219,185,.08)';
+    context.fillRect(883, 323, 5, 95);
+    context.restore();
+  }
   const reflectionTexture = new THREE.CanvasTexture(reflectionCanvas);
+  reflectionTexture.colorSpace = THREE.SRGBColorSpace;
   reflectionTexture.wrapS = THREE.RepeatWrapping;
-  reflectionTexture.repeat.x = 1.25;
-  windowReflectionTextures.push(reflectionTexture);
+  reflectionTexture.repeat.x = roomReflections ? 1 : 1.25;
+  if (!roomReflections) windowReflectionTextures.push(reflectionTexture);
   const glass = new THREE.Mesh(
     new THREE.PlaneGeometry(width, height),
-    new THREE.MeshBasicMaterial({ map: reflectionTexture, color: 0xb9d7e8, transparent: true, opacity: .2, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, side: THREE.DoubleSide }),
+    new THREE.MeshBasicMaterial({ map: reflectionTexture, color: roomReflections ? 0xffffff : 0xb9d7e8, transparent: true, opacity: roomReflections ? .36 : .2, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, side: THREE.DoubleSide }),
   );
   glass.position.set(x, y, z);
   glass.rotation.y = rotationY;
@@ -515,6 +712,7 @@ function makeArchitecture() {
   box(.3, 7, 15, materials.concrete, 13, 3.5, 0);
   box(26, 7, .3, materials.brick, 0, 3.5, -7.5);
   box(16.8, 6.7, .04, materials.wallpaper, 4.4, 3.5, -7.29);
+  box(6.22, 6.7, .025, materials.officeWood, .925, 3.5, -7.24);
   box(.04, 6.7, 14.4, materials.rusticWallpaper, -12.82, 3.5, 0);
   box(.04, 6.7, 14.4, materials.bookingWallpaper, 12.82, 3.5, 0);
   box(25.5, 1.35, .08, materials.walnutGrain, 0, .84, -7.2);
@@ -523,7 +721,7 @@ function makeArchitecture() {
   box(.08, 1.35, 14.4, materials.walnutGrain, 12.76, .84, 0);
   box(.04, .05, 14.4, materials.brass, -12.7, 1.55, 0);
   box(.04, .05, 14.4, materials.brass, 12.7, 1.55, 0);
-  [-4.8, .2, 5.2, 10.2].forEach(x => {
+  [-4.8, 5.2, 10.2].forEach(x => {
     box(.11, 4.65, .06, materials.walnutGrain, x, 4.02, -7.14);
     box(.06, 4.8, .035, materials.brass, x + .08, 4.02, -7.09);
   });
@@ -537,12 +735,12 @@ function makeArchitecture() {
   });
   box(26, .22, .3, materials.black, 0, 6.7, 7.12);
   box(26, .28, .3, materials.black, 0, .25, 7.12);
-  box(.22, 7, 15, materials.legacySilver, 4.3, 3.5, 0);
-  box(.22, 7, 15, materials.rusticWallpaper, -2.3, 3.5, 0);
+  box(.22, 7, 15, materials.officeWood, 4.3, 3.5, 0);
+  box(.22, 7, 15, materials.officeWood, -2.3, 3.5, 0);
 }
 
 function makeExecutiveOffice() {
-  box(5.8, .035, 4.4, materials.rug, -.25, .16, .8);
+  box(6.3, .04, 14.5, materials.officeCarpet, .925, .125, -.05);
   box(2.5, .12, 1.15, materials.walnutGrain, .55, .74, 3.4);
   [-.5, 1.6].forEach(x => box(.1, .62, .1, materials.brass, x, .42, 3.4));
   box(1.2, .07, .48, materials.marble, .55, .84, 3.4);
@@ -565,7 +763,7 @@ function makeExecutiveOffice() {
   scene.add(pendant);
   box(.04, 1.0, .04, materials.brass, .2, 6.6, 1.1);
 
-  [-2.35, 3.15].forEach(x => {
+  [-2.35].forEach(x => {
     box(.16, .52, .09, materials.brass, x, 4.55, -7.05);
     const sconce = new THREE.PointLight(0xffc576, 5, 3.5, 2);
     sconce.position.set(x, 4.45, -6.6);
@@ -576,15 +774,6 @@ function makeExecutiveOffice() {
     sign([top, bottom], 1.15, 1.5, x, y, .55, rotationY, { background: '#241a18', border: '#c59a4c', accent: '#d9b86d' });
   });
 
-  for (let shelf = 0; shelf < 3; shelf += 1) {
-    const y = 1.6 + shelf * .72;
-    box(2.6, .06, .32, materials.walnutGrain, 1.45, y, -7.02);
-    box(2.64, .02, .04, materials.brass, 1.45, y + .05, -6.98);
-    for (let book = 0; book < 7; book += 1) {
-      const bookHeight = .2 + (book % 3) * .05;
-      box(.12, bookHeight, .18, book % 2 ? materials.burgundy : materials.leather, .52 + book * .22, y + bookHeight / 2, -6.83);
-    }
-  }
 }
 
 function makeRingView() {
@@ -640,52 +829,107 @@ let packVendingMachine;
 let packBrandSignature = '';
 let loungeCardBook;
 let financeDeskItems;
+let coffeeMug;
+let deskLavaLamp;
+let officeMonitorScreen;
+let officeMonitorSignature = '';
+const deskMotionReduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 let companyWallEmblem;
 let companyWallSignature = '';
 const wallPaintings = [null, null];
 const paintingArtUrls = { rothko: rothkoUrl, dali: daliUrl, goya: goyaUrl };
+const loungeModelLoader = new GLTFLoader();
+
+function addLoungeModel(fileName, name, position, targetSize) {
+  loungeModelLoader.load(`/models/furniture-kit/Models/glb/${fileName}`, gltf => {
+    const model = gltf.scene;
+    model.rotation.y = position.rotationY ?? 0;
+    model.updateMatrixWorld(true);
+    const bounds = new THREE.Box3().setFromObject(model);
+    const sourceSize = bounds.getSize(new THREE.Vector3());
+    if (!sourceSize.x || !sourceSize.y || !sourceSize.z) return;
+    const scale = Math.min(targetSize.x / sourceSize.x, targetSize.y / sourceSize.y, targetSize.z / sourceSize.z);
+    model.scale.setScalar(scale);
+    model.updateMatrixWorld(true);
+    bounds.setFromObject(model);
+    const center = bounds.getCenter(new THREE.Vector3());
+    model.position.set(position.x - center.x, position.y - bounds.min.y, position.z - center.z);
+    model.name = name;
+    model.traverse(object => {
+      if (!object.isMesh) return;
+      object.castShadow = true;
+      object.receiveShadow = true;
+    });
+    scene.add(model);
+  }, undefined, error => console.warn(`Unable to load lounge model: ${fileName}`, error));
+}
 
 function makeLounge() {
   const centerX = -7.55;
   const windowZ = 6.96;
   const ownedLoungeItems = new Set(getState().lounge?.owned ?? []);
 
-  box(9.9, .08, 7.2, materials.modernWhite, centerX, .18, 3.35);
-  box(.14, 6.25, 6.75, materials.modernWhite, -12.63, 3.25, 3.62);
-  box(.14, 6.25, 6.75, materials.modernWhite, -2.47, 3.25, 3.62);
+  const plaster = new THREE.MeshStandardMaterial({ color: '#dedfda', roughness: .92 });
+  const floorTexture = createLoungeSurfaceTexture(7, 5);
+  const floor = new THREE.MeshStandardMaterial({ color: '#d5d8d4', map: floorTexture, bumpMap: floorTexture, bumpScale: .003, roughness: .48 });
+  box(9.9, .08, 7.2, floor, centerX, .18, 3.35);
+  box(.14, 6.25, 6.75, plaster, -12.63, 3.25, 3.62);
+  box(.14, 6.25, 6.75, plaster, -2.47, 3.25, 3.62);
   addImageWall(skylineUrl, 9.55, 5.45, centerX, 3.55, windowZ, Math.PI, { preserveAspect: true });
-  addWindowGlass(9.55, 5.45, centerX, 3.55, 6.86, Math.PI);
+  addWindowGlass(9.55, 5.45, centerX, 3.55, 6.86, Math.PI, { roomReflections: true });
   box(9.85, .22, .18, materials.black, centerX, 6.42, 6.82);
   box(9.85, .22, .18, materials.black, centerX, .78, 6.82);
   [-11.55, -9.55, -7.55, -5.55, -3.55].forEach(x => box(.14, 5.6, .16, materials.black, x, 3.55, 6.83));
   box(9.8, .08, .18, materials.brass, centerX, .94, 6.69);
 
   box(6.8, .06, 3.35, materials.rug, centerX, .25, 3.95);
-  box(3.5, .28, .9, materials.leather, centerX - .55, .72, 3.15);
-  box(3.5, .76, .2, materials.leather, centerX - .55, 1.13, 2.76);
-  box(.9, .28, 2.15, materials.leather, centerX + 1.45, .72, 3.77);
-  box(.2, .76, 2.15, materials.leather, centerX + 1.83, 1.13, 3.77);
-  [-1.72, .62].forEach(offset => box(.18, .48, .85, materials.leather, centerX + offset, .9, 4.72));
-  box(1.45, .12, .82, materials.marble, centerX - .15, .55, 4.88);
-  [-.68, .38].forEach(offset => box(.12, .48, .12, materials.brass, centerX + offset, .3, 4.88));
-  const catalogBase = box(.34, .045, .38, materials.walnutGrain, centerX - .64, .68, 4.95);
+  const chair = createLoungeChair();
+  chair.position.set(-9.85, .28, 4.55);
+  chair.rotation.y = Math.PI / 2;
+  scene.add(chair);
+  const contactCanvas = document.createElement('canvas');
+  contactCanvas.width = contactCanvas.height = 128;
+  const contactContext = contactCanvas.getContext('2d');
+  const contactGradient = contactContext.createRadialGradient(64, 64, 8, 64, 64, 64);
+  contactGradient.addColorStop(0, 'rgba(24,27,25,.30)');
+  contactGradient.addColorStop(.5, 'rgba(24,27,25,.16)');
+  contactGradient.addColorStop(1, 'rgba(24,27,25,0)');
+  contactContext.fillStyle = contactGradient;
+  contactContext.fillRect(0, 0, 128, 128);
+  const contactTexture = new THREE.CanvasTexture(contactCanvas);
+  contactTexture.colorSpace = THREE.SRGBColorSpace;
+  const contactMaterial = new THREE.MeshBasicMaterial({ map: contactTexture, transparent: true, depthWrite: false, toneMapped: false });
+  [
+    [-9.85, .283, 4.55, 1.65, 1.75],
+    [centerX - .15, .282, 4.88, 2.1, 1.6],
+    [-3.08, .222, 3.7, 1.04, 2.2],
+  ].forEach(([x, y, z, width, depth], index) => {
+    const shadow = new THREE.Mesh(new THREE.PlaneGeometry(width, depth), contactMaterial);
+    shadow.name = `lounge-contact-shadow-${index}`;
+    shadow.rotation.x = -Math.PI / 2;
+    shadow.position.set(x, y, z);
+    scene.add(shadow);
+  });
+  const tableTopY = .73;
+  addLoungeModel('tableCoffee.glb', 'lounge-coffee-table', { x: centerX - .15, y: .28, z: 4.88 }, { x: 1.8, y: .45, z: 1.2 });
+  const catalogBase = box(.34, .045, .38, materials.walnutGrain, centerX - .64, tableTopY + .0225, 4.95);
   catalogBase.rotation.y = Math.PI / 6;
   const loungeCatalog = new THREE.Mesh(
     new THREE.PlaneGeometry(.3, .36),
     new THREE.MeshBasicMaterial({ map: imageTexture(catalogUrl), toneMapped: false }),
   );
-  loungeCatalog.position.set(centerX - .64, .707, 4.95);
+  loungeCatalog.position.set(centerX - .64, tableTopY + .052, 4.95);
   loungeCatalog.rotation.x = -Math.PI / 2;
   loungeCatalog.rotation.z = Math.PI + Math.PI / 6;
   scene.add(loungeCatalog);
   loungeCardBook = createCardBook();
-  loungeCardBook.position.set(centerX + .08, .615, 4.88);
+  loungeCardBook.position.set(centerX + .08, tableTopY, 4.88);
   scene.add(loungeCardBook);
   const packCompany = getCompanyIdentity();
   packVendingMachine = createVendingMachine(getCribPacks(), imageTexture(companyLogoUrl(packCompany.acronym, packCompany.name, packCompany.logoStyle, packCompany.logoAccent)));
   packBrandSignature = JSON.stringify(packCompany);
-  packVendingMachine.position.set(-5.45, .24, 6.35);
-  packVendingMachine.rotation.y = Math.PI;
+  packVendingMachine.position.set(-2.94, .24, 3.7);
+  packVendingMachine.rotation.y = -Math.PI / 2;
   scene.add(packVendingMachine);
   if (ownedLoungeItems.has('vinyl-library')) {
   // The collection is built into the left wall, keeping the enlarged Lounge open from its entry view.
@@ -815,7 +1059,7 @@ function makeLounge() {
     scene.add(button);
   });
   }
-  [-11.15, -5.95].forEach(x => {
+  [-11.15].forEach(x => {
     box(.18, 1.2, .18, materials.brass, x, 1.15, 4.95);
     const lampShade = new THREE.Mesh(new THREE.ConeGeometry(.34, .18, 18, 1, true), materials.modernWhite);
     lampShade.position.set(x, 1.82, 4.95);
@@ -824,16 +1068,16 @@ function makeLounge() {
     lampLight.position.set(x, 1.7, 4.95);
     scene.add(lampLight);
   });
-  [-11.85, -5.2].forEach(x => {
-    const pot = new THREE.Mesh(new THREE.CylinderGeometry(.16, .2, .28, 12), materials.black);
-    pot.position.set(x, .42, 5.85);
-    scene.add(pot);
-    for (let leaf = 0; leaf < 5; leaf += 1) {
-      const foliage = new THREE.Mesh(new THREE.SphereGeometry(.16, 10, 8), new THREE.MeshStandardMaterial({ color: 0x315940, roughness: .9 }));
-      foliage.position.set(x + (leaf - 2) * .08, .67 + (leaf % 2) * .1, 5.85);
-      scene.add(foliage);
-    }
-  });
+  const plantX = -11.85;
+  const plantZ = 5.85;
+  const plantPot = new THREE.Mesh(new THREE.CylinderGeometry(.16, .2, .28, 12), materials.black);
+  plantPot.position.set(plantX, .42, plantZ);
+  scene.add(plantPot);
+  for (let leaf = 0; leaf < 5; leaf += 1) {
+    const foliage = new THREE.Mesh(new THREE.SphereGeometry(.16, 10, 8), new THREE.MeshStandardMaterial({ color: 0x315940, roughness: .9 }));
+    foliage.position.set(plantX + (leaf - 2) * .08, .67 + (leaf % 2) * .1, plantZ);
+    scene.add(foliage);
+  }
   const loungeLight = new THREE.PointLight(0xffd49a, 10, 5, 2);
   loungeLight.position.set(centerX, 4.9, 4.7);
   scene.add(loungeLight);
@@ -843,24 +1087,108 @@ function makeLounge() {
 }
 
 function makeDesk() {
-  box(3.7, .18, 1.8, materials.marble, 0, 1.1, -2.5);
-  box(.22, 1.1, 1.55, materials.walnutGrain, -1.62, .55, -2.5);
-  box(.22, 1.1, 1.55, materials.walnutGrain, 1.62, .55, -2.5);
+  const desk = new THREE.Group();
+  desk.name = 'retro-corner-desk';
+  desk.position.set(1.55, 0, -5.72);
+  desk.rotation.y = -.12;
+  scene.add(desk);
+  const beige = new THREE.MeshStandardMaterial({ color: '#c8c3a4', roughness: .82 });
+  const keys = new THREE.MeshStandardMaterial({ color: '#e0dcc4', roughness: .78 });
+  const ceramic = new THREE.MeshStandardMaterial({ color: '#e6e0cc', roughness: .32 });
+  const add = (geometry, material, x, y, z) => {
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.set(x, y, z);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    desk.add(mesh);
+    return mesh;
+  };
+  const part = (width, height, depth, material, x, y, z) => add(new THREE.BoxGeometry(width, height, depth), material, x, y, z);
+  part(4.3, .18, 1.8, materials.deskWood, 0, 1.1, 0);
+  part(.22, 1.1, 1.55, materials.deskWood, -1.92, .55, 0);
+  part(.22, 1.1, 1.55, materials.deskWood, 1.92, .55, 0);
+  part(1.05, .2, 1.3, beige, .2, 1.3, -.22);
+  part(1.18, .91, .8, beige, .2, 1.92, -.38);
+  part(1.02, .73, .025, materials.black, .2, 1.95, .033);
+  officeMonitorScreen = add(new THREE.PlaneGeometry(.91, .63), new THREE.MeshBasicMaterial({ toneMapped: false }), .2, 1.95, .051);
+  officeMonitorScreen.name = 'retro-computer-screen';
+  refreshOfficeMonitor();
+  part(.25, .018, .02, materials.steel, -.12, 1.52, .033);
+  add(new THREE.SphereGeometry(.018, 10, 8), new THREE.MeshBasicMaterial({ color: '#a2ce70' }), .62, 1.52, .042);
+  part(1.25, .07, .42, beige, .2, 1.23, .48);
+  for (let row = 0; row < 4; row += 1) {
+    for (let column = 0; column < 14; column += 1) {
+      part(.069, .018, .061, keys, -.33 + column * .081, 1.276, .34 + row * .076);
+    }
+  }
+  part(.43, .018, .047, keys, .14, 1.276, .67);
+  const mouse = add(new THREE.SphereGeometry(.12, 16, 12), beige, 1.04, 1.235, .54);
+  mouse.scale.set(.75, .4, 1.2);
+  part(.007, .01, .08, materials.steel, 1.04, 1.28, .485);
+  const cable = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(1.04, 1.22, .4), new THREE.Vector3(1.1, 1.22, .13),
+    new THREE.Vector3(.88, 1.22, -.06), new THREE.Vector3(.96, 1.22, -.53),
+    new THREE.Vector3(.65, 1.22, -.58),
+  ]);
+  add(new THREE.TubeGeometry(cable, 24, .009, 6, false), materials.black, 0, 0, 0);
   financeDeskItems = createFinanceDeskProps(imageTexture(ticketsUrl));
-  financeDeskItems.position.set(-1.25, 1.205, -1.94);
-  scene.add(financeDeskItems);
+  financeDeskItems.position.set(-1.49, 1.205, .62);
+  desk.add(financeDeskItems);
+  const mugMaterial = new THREE.MeshStandardMaterial({ map: createCompanyMugTexture(getCompanyIdentity()), roughness: .32 });
+  coffeeMug = add(new THREE.CylinderGeometry(.15, .14, .28, 48, 1, true), mugMaterial, 1.47, 1.34, .38);
+  coffeeMug.name = 'company-logo-coffee-mug';
+  coffeeMug.rotation.y = Math.PI;
+  add(new THREE.CircleGeometry(.133, 24), new THREE.MeshStandardMaterial({ color: '#2d2018', roughness: .3 }), 1.47, 1.445, .38).rotation.x = -Math.PI / 2;
+  const handle = add(new THREE.TorusGeometry(.105, .027, 8, 20), ceramic, 1.635, 1.34, .38);
+  handle.scale.x = .8;
+  for (let magazine = 0; magazine < 3; magazine += 1) {
+    const issue = part(.51, .025, .64, magazine % 2 ? materials.burgundy : keys, 1.45, 1.205 + magazine * .03, -.2);
+    issue.rotation.y = -.15 + magazine * .12;
+  }
+  const cover = add(new THREE.PlaneGeometry(.48, .61), new THREE.MeshStandardMaterial({ map: imageTexture(magazineUrl), roughness: .75 }), 1.45, 1.282, -.2);
+  cover.name = 'office-magazine-cover';
+  cover.rotation.x = -Math.PI / 2;
+  cover.rotation.z = .09;
+  add(new THREE.CylinderGeometry(.19, .24, .055, 24), materials.brass, -1.51, 1.23, -.43);
+  add(new THREE.CylinderGeometry(.035, .05, .78, 16), materials.brass, -1.51, 1.64, -.43);
+  add(new THREE.SphereGeometry(.3, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), materials.brass, -1.51, 2.02, -.43).scale.set(1.3, .6, .8);
+  const lamp = new THREE.PointLight('#ffda91', 4, 4, 2);
+  lamp.position.set(-1.51, 1.98, -.43);
+  desk.add(lamp);
+  [
+    { x: -.96, z: -.68, skinColor: '#c89e71', outfitColor: '#202322', pose: 'salute', shirt: true, facePaint: true, longBlackHair: true, trenchCoat: true },
+    { x: -.58, z: -.63, skinColor: '#b78154', outfitColor: '#9f3439', pose: 'flex', longBlondHair: true },
+    { x: 1.04, z: -.7, skinColor: '#795336', outfitColor: '#28765a', pose: 'ready' },
+  ].forEach((options, index) => {
+    const figure = createWrestlingFigure(options);
+    figure.name = `desk-wrestling-figure-${index + 1}`;
+    figure.scale.setScalar(.6);
+    figure.position.set(options.x, 1.19, options.z);
+    figure.rotation.y = index === 1 ? -.2 : .15;
+    desk.add(figure);
+  });
+  deskLavaLamp = createLavaLamp();
+  deskLavaLamp.position.set(1.96, 1.19, -.72);
+  desk.add(deskLavaLamp);
+  [[1.2, 3.3, .9, 1.3, poster1Url], [2.35, 3.1, .85, 1.15, poster2Url], [3.45, 3.35, .79, 1.26, poster3Url]].forEach(([x, y, width, height, url], index) => {
+    box(width + .05, height + .05, .045, materials.walnutGrain, x, y, -7.04);
+    const poster = new THREE.Mesh(new THREE.PlaneGeometry(width, height), new THREE.MeshBasicMaterial({ map: imageTexture(url), toneMapped: false }));
+    poster.name = `office-poster-${index + 1}`;
+    poster.position.set(x, y, -7.015);
+    poster.rotation.z = index === 0 ? .02 : index === 1 ? -.025 : 0;
+    scene.add(poster);
+  });
+}
 
-  box(1.46, .94, .12, materials.black, .25, 1.9, -2.86);
-  const monitorScreen = new THREE.Mesh(
-    new THREE.PlaneGeometry(1.3, .74),
-    new THREE.MeshBasicMaterial({ map: imageTexture(windows95Url), fog: false, side: THREE.DoubleSide, toneMapped: false }),
-  );
-  monitorScreen.position.set(.25, 1.9, -2.795);
-  scene.add(monitorScreen);
-  box(.1, .48, .1, materials.steel, .25, 1.25, -2.86);
-  box(.72, .07, .3, materials.steel, .25, 1.17, -2.72);
-  box(1.15, .05, .38, materials.black, .25, 1.23, -2.47);
-  box(.22, .05, .32, materials.black, 1.05, 1.23, -2.45);
+function refreshOfficeMonitor() {
+  if (!officeMonitorScreen) return;
+  const data = { company: getCompanyIdentity().acronym, date: getState().date, mail: unreadEmailCount(), desktopUrl: windows95Url };
+  const signature = JSON.stringify(data);
+  if (officeMonitorSignature === signature) return;
+  officeMonitorScreen.material.map?.dispose();
+  officeMonitorScreen.material.map = createRetroComputerTexture(data);
+  officeMonitorScreen.material.needsUpdate = true;
+  officeMonitorSignature = signature;
 }
 
 function refreshPackBranding() {
@@ -876,7 +1204,7 @@ function refreshPackBranding() {
 }
 
 function makeCompanyWall() {
-  box(.18, 7, 14.8, materials.legacySilver, 4.15, 3.5, 0);
+  box(.18, 7, 14.8, materials.officeWood, 4.15, 3.5, 0);
   box(.05, .14, 14.7, materials.steel, 4.025, .25, 0);
   refreshCompanyWallEmblem();
   refreshWallPaintings();
@@ -889,6 +1217,11 @@ function refreshCompanyWallEmblem() {
   const company = getCompanyIdentity();
   const signature = JSON.stringify([company.acronym, company.name, company.logoStyle, company.logoAccent]);
   if (companyWallSignature === signature) return;
+  if (coffeeMug) {
+    coffeeMug.material.map?.dispose();
+    coffeeMug.material.map = createCompanyMugTexture(company);
+    coffeeMug.material.needsUpdate = true;
+  }
   if (companyWallEmblem) {
     scene.remove(companyWallEmblem);
     disposeOfficeDisplay(companyWallEmblem);
@@ -918,88 +1251,29 @@ function refreshWallPaintings() {
 }
 
 function makeCalendar() {
-  const centerX = -8.65;
-  const boardZ = -7.24;
-  const boardFrontZ = -7.1;
-  const columns = 7;
-  const rows = 6;
-  const cellWidth = .58;
-  const cellHeight = .4;
-  const gap = .07;
-  const gridWidth = columns * cellWidth + (columns - 1) * gap;
-  const gridLeft = centerX - gridWidth / 2 + cellWidth / 2;
-  const weekdayY = 5.1;
-  const firstRowY = 4.62;
-
-  box(10.5, 6.7, .12, materials.blackBrick, -7.55, 3.5, -7.24);
-  box(8.08, .24, .34, materials.black, centerX, 6.48, -7.03);
-  [-2.45, 0, 2.45].forEach(offset => {
-    box(.56, .12, .38, materials.black, centerX + offset, 6.27, -7.0);
-    box(.34, .04, .26, materials.brass, centerX + offset, 6.18, -6.97);
-    const downlight = new THREE.PointLight(0xffcc82, 8, 5.5, 2);
-    downlight.position.set(centerX + offset, 6.05, -6.7);
-    scene.add(downlight);
-  });
-  box(5, 5.15, .16, materials.black, centerX, 3.45, boardZ);
-  calendarHeaderSign = sign(['SHOW 1', 'JANUARY 1996'], 4.25, .46, centerX, 5.72, boardFrontZ, 0, { background: '#201f21', border: '#d0a94f' });
-  ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'].forEach((day, column) => {
-    const x = gridLeft + column * (cellWidth + gap);
-    sign([day], cellWidth, .25, x, weekdayY, boardFrontZ, 0, { background: '#18181a', border: '#d0a94f', accent: '#f1df9b' });
-  });
-  for (let row = 0; row < rows; row += 1) {
-    for (let column = 0; column < columns; column += 1) {
-      const x = gridLeft + column * (cellWidth + gap);
-      const y = firstRowY - row * (cellHeight + gap);
-      const tile = box(cellWidth, cellHeight, .06, new THREE.MeshStandardMaterial({ color: 0x27262a, roughness: .72 }), x, y, boardFrontZ);
-      const label = sign([''], cellWidth - .08, cellHeight - .08, x, y, boardFrontZ + .04, 0, { background: '#11141d', border: '#4a4c56', accent: '#d8d1c5' });
-      calendarCells.push({ tile, label });
-    }
+  const centerX = -.65;
+  const boardZ = -7;
+  const boardFrontZ = -6.93;
+  const paper = new THREE.MeshStandardMaterial({ color: '#e1d8b9', roughness: .96 });
+  box(2.125, 1.7, .055, paper, centerX, 3.9, boardZ);
+  box(2.125, .068, .075, materials.leather, centerX, 4.75, boardZ);
+  for (let binding = 0; binding < 18; binding += 1) {
+    const loop = new THREE.Mesh(new THREE.TorusGeometry(.0357, .0085, 6, 12), materials.steel);
+    loop.position.set(centerX - .986 + binding * .1156, 4.75, boardFrontZ);
+    scene.add(loop);
   }
-  sign(['ACTIVITY DAYS', 'MATCH THE CALENDAR WALL'], 3.35, .36, centerX, 1.1, boardFrontZ, 0, { background: '#18181a', border: '#5e5647', text: '#bdb5a5' });
+  calendarSheet = new THREE.Mesh(new THREE.PlaneGeometry(2.125, 1.7), new THREE.MeshBasicMaterial({ toneMapped: false }));
+  calendarSheet.position.set(centerX, 3.9, boardFrontZ);
+  scene.add(calendarSheet);
+  refreshCalendarWall();
+  document.fonts.ready.then(refreshCalendarWall);
 }
 
 function refreshCalendarWall() {
-  const state = getState();
-  const show = getShow();
-  const leadUp = getLeadUp();
-  const currentDate = new Date(`${state.date}T12:00:00`);
-  const year = currentDate.getFullYear();
-  const month = currentDate.getMonth();
-  const firstOffset = (new Date(year, month, 1).getDay() + 6) % 7;
-  const totalDays = new Date(year, month + 1, 0).getDate();
-  const ppvDay = new Date(`${state.date}T12:00:00`).getDate();
-  const activityDays = [ppvDay - 20, ppvDay - 13, ppvDay - 6];
-  const muted = { background: '#11141d', border: '#36363b', accent: '#77736c' };
-
-  calendarCells.forEach((cell, index) => {
-    const day = index - firstOffset + 1;
-    if (day < 1 || day > totalDays) {
-      cell.tile.visible = false;
-      cell.label.visible = false;
-      return;
-    }
-    cell.tile.visible = true;
-    cell.label.visible = true;
-    const slot = activityDays.indexOf(day) + 1;
-    const activity = slot ? leadUp.log.find(entry => (entry.slot ?? entry.week) === slot) : null;
-    const ppv = day === ppvDay;
-    const lines = ppv
-      ? ['PPV', String(day), show.name.slice(0, 15)]
-      : activity
-        ? [`DONE ${slot}`, String(day), 'ACTIVITY']
-        : slot
-          ? [`ACT ${slot}`, String(day), 'PLAN']
-          : ['OFF', String(day)];
-    const colors = ppv
-      ? { background: '#4a2024', border: '#d3a84e', accent: '#f9e7b7' }
-      : activity
-        ? { background: '#332924', border: '#a67b38', accent: '#e7c676' }
-        : slot
-          ? { background: '#262220', border: '#8b6833', accent: '#d3a84e' }
-          : muted;
-    cell.tile.material.color.set(ppv ? 0x5a252b : activity ? 0x403027 : slot ? 0x312a23 : 0x242429);
-    updateSign(cell.label, lines, colors);
-  });
+  if (!calendarSheet) return;
+  calendarSheet.material.map?.dispose();
+  calendarSheet.material.map = calendarWallTexture(getState(), getShow(), getLeadUp());
+  calendarSheet.material.needsUpdate = true;
 }
 
 function makeBookingBoard() {
@@ -1008,6 +1282,11 @@ function makeBookingBoard() {
   const tvFrontZ = -6.58;
   const boardFrontZ = -6.92;
   const whiteboard = new THREE.MeshStandardMaterial({ color: 0xd8d8cf, roughness: .72 });
+  const brickWall = materials.brick.clone();
+  brickWall.map = imageTexture(bookingBrickUrl);
+  brickWall.map.repeat.set(.9, .74);
+  brickWall.map.offset.set(.05, .13);
+  brickWall.map.wrapS = brickWall.map.wrapT = THREE.ClampToEdgeWrapping;
   const show = getShow();
   const branding = getState().eventBranding[show.eventId] || {};
   const event = PPV_CALENDAR.find(entry => entry.id === show.eventId);
@@ -1017,7 +1296,7 @@ function makeBookingBoard() {
   const stickyPink = new THREE.MeshStandardMaterial({ color: 0xe4a1a3, roughness: .82 });
 
   box(8.3, .08, 6.7, materials.walnutGrain, 8.55, .24, -3.65);
-  box(8.45, 6.7, .08, materials.bulletinBoard, 8.55, 3.5, -7.08);
+  box(8.45, 6.7, .08, brickWall, 8.55, 3.5, -7.08);
   box(.06, 6.7, 6.8, materials.bookingWallpaper, 4.42, 3.5, -3.65);
   box(.06, 6.7, 6.8, materials.bookingWall, 12.84, 3.5, -3.65);
   box(8.75, .25, .18, materials.walnutGrain, 8.55, 6.64, -6.98);
@@ -1092,7 +1371,7 @@ function makeBookingBoard() {
 // the wall's physical limit (VHS_MAX_ROWS x VHS_COLS); once full, the shelf shows
 // the most recent tapes and keeps scrolling forward.
 const VHS_WALL_X = 12.84;
-const VHS_SHELF_DEPTH = .3;
+const VHS_SHELF_DEPTH = .64;
 const VHS_SHELF_X = VHS_WALL_X - VHS_SHELF_DEPTH / 2 - .05;
 const VHS_COLS = 14;
 const VHS_Z_START = -6.6;
@@ -1102,18 +1381,24 @@ const VHS_ROW_PITCH = .65;
 const VHS_Y_START = 1;
 const VHS_MAX_ROWS = 8;
 let vhsBuiltRows = 0;
+const vhsHandwritingReady = document.fonts.load('26px "Permanent Marker"').catch(() => []);
 
 function vhsSpineTexture(entry) {
   const canvas = document.createElement('canvas');
-  canvas.width = 112;
-  canvas.height = 440;
+  canvas.width = 224;
+  canvas.height = 880;
   const ctx = canvas.getContext('2d');
+  ctx.scale(2, 2);
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
+  let disposed = false;
+  let loadedLogo = null;
+  texture.addEventListener('dispose', () => { disposed = true; });
   const branding = entry.eventBranding || {};
   const color = branding.color || '#3a3a3a';
   const event = PPV_CALENDAR.find(item => item.id === entry.eventId);
-  const eventName = (branding.name || entry.showName || 'SHOW').toUpperCase();
+  const eventName = (entry.showName || branding.name || 'SHOW').toUpperCase();
+  const labelSeed = [...`${eventName}|${entry.date}`].reduce((total, letter) => total + letter.charCodeAt(0), 0);
   const rawDate = entry.date || '';
   const date = new Date(/^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? `${rawDate}T12:00:00` : rawDate);
   const dateText = !Number.isNaN(date.getTime())
@@ -1121,7 +1406,9 @@ function vhsSpineTexture(entry) {
     : rawDate.toUpperCase();
 
   const draw = logoImage => {
-    const { width, height } = canvas;
+    if (disposed) return;
+    const width = 112;
+    const height = 440;
     ctx.fillStyle = '#111214';
     ctx.fillRect(0, 0, width, height);
     ctx.fillStyle = '#25272b';
@@ -1138,34 +1425,46 @@ function vhsSpineTexture(entry) {
       ctx.drawImage(logoImage, logoBox.x + (logoBox.size - w) / 2, logoBox.y + (logoBox.size - h) / 2, w, h);
     }
 
-    // Spine text runs along the tape, reading top to bottom.
-    const textTop = logoBox.y + logoBox.size + 12;
-    const textLength = height - textTop - 16;
+    const labelTop = logoBox.y + logoBox.size + 18;
+    const labelHeight = height - labelTop - 20;
+    const textLength = labelHeight - 28;
     ctx.save();
-    ctx.translate(width / 2, textTop + textLength / 2);
+    ctx.translate(width / 2 + (labelSeed % 3 - 1), labelTop + labelHeight / 2);
+    ctx.rotate((labelSeed % 7 - 3) * .004);
+    ctx.fillStyle = '#090a0c';
+    ctx.fillRect(-43, -labelHeight / 2 + 2, 88, labelHeight);
+    ctx.fillStyle = '#faf9f3';
+    ctx.fillRect(-44, -labelHeight / 2, 88, labelHeight);
+    ctx.strokeStyle = '#c9cbd0';
+    ctx.lineWidth = .8;
+    ctx.strokeRect(-44, -labelHeight / 2, 88, labelHeight);
     ctx.rotate(Math.PI / 2);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     let titleSize = 26;
-    ctx.font = `600 ${titleSize}px 'Barlow Condensed', 'Franklin Gothic Medium', sans-serif`;
-    while (titleSize > 14 && ctx.measureText(eventName).width > textLength) {
+    ctx.font = `${titleSize}px 'Permanent Marker', 'Comic Sans MS', cursive`;
+    while (titleSize > 10 && ctx.measureText(eventName).width > textLength) {
       titleSize -= 1;
-      ctx.font = `600 ${titleSize}px 'Barlow Condensed', 'Franklin Gothic Medium', sans-serif`;
+      ctx.font = `${titleSize}px 'Permanent Marker', 'Comic Sans MS', cursive`;
     }
-    ctx.fillStyle = '#f4ead6';
-    ctx.fillText(eventName, 0, -9, textLength);
-    ctx.font = '500 9px "DM Mono", "Courier New", monospace';
-    ctx.fillStyle = '#a7aaae';
-    ctx.fillText(dateText, 0, 16, textLength);
+    ctx.fillStyle = ['#263f78', '#a32e38', '#22252a'][labelSeed % 3];
+    ctx.fillText(eventName, labelSeed % 5 - 2, -13, textLength);
+    ctx.font = '14px "Permanent Marker", "Comic Sans MS", cursive';
+    ctx.fillStyle = '#263f78';
+    ctx.fillText(dateText, 0, 18, textLength);
     ctx.restore();
 
     texture.needsUpdate = true;
   };
   draw(null);
+  vhsHandwritingReady.then(() => draw(loadedLogo));
   const logoSrc = logoUrl(branding.logoId || event?.logoId || 'generated', branding.name || eventName, color, branding.logoStyle);
   if (logoSrc) {
     const image = new Image();
-    image.onload = () => draw(image);
+    image.onload = () => {
+      loadedLogo = image;
+      draw(image);
+    };
     image.src = logoSrc;
   }
   return texture;
@@ -1184,8 +1483,8 @@ function buildVhsShelfRow(row) {
   const shelfY = VHS_Y_START + row * VHS_ROW_PITCH;
   const zSpan = VHS_Z_END - VHS_Z_START;
   const zMid = VHS_Z_START + zSpan / 2;
-  box(VHS_SHELF_DEPTH, .045, zSpan + .2, materials.walnut, VHS_SHELF_X, shelfY - .34, zMid);
-  box(VHS_SHELF_DEPTH + .03, .01, zSpan + .22, materials.brass, VHS_SHELF_X - .015, shelfY - .31, zMid);
+  box(VHS_SHELF_DEPTH, .06, zSpan + .5, materials.walnutGrain, VHS_SHELF_X, shelfY - .305, zMid);
+  box(.025, .02, zSpan + .52, materials.brass, VHS_SHELF_X - VHS_SHELF_DEPTH / 2 - .008, shelfY - .29, zMid);
   for (let col = 0; col < VHS_COLS; col += 1) {
     const z = VHS_Z_START + col * VHS_COL_PITCH + VHS_COL_PITCH / 2;
     const group = new THREE.Group();
@@ -1209,13 +1508,13 @@ function buildVhsShelfRow(row) {
 }
 
 function ensureVhsShelfRows(tapeCount) {
-  const rowsNeeded = Math.min(VHS_MAX_ROWS, Math.max(1, Math.ceil(tapeCount / VHS_COLS)));
+  const rowsNeeded = Math.min(VHS_MAX_ROWS, Math.max(3, Math.ceil(tapeCount / VHS_COLS)));
   while (vhsBuiltRows < rowsNeeded) buildVhsShelfRow(vhsBuiltRows);
 }
 
 function makeVhsShelf() {
   const zMid = VHS_Z_START + (VHS_Z_END - VHS_Z_START) / 2;
-  vhsArchiveSign = sign(['VHS ARCHIVE', 'EMPTY SHELF'], 1.5, .34, VHS_WALL_X - .13, 6.15, zMid, -Math.PI / 2, { background: '#171412', border: '#c59a4c', accent: '#d9b86d' });
+  vhsArchiveSign = sign(['SHOW ARCHIVE', 'EMPTY SHELF'], 1.5, .34, VHS_WALL_X - .13, 6.15, zMid, -Math.PI / 2, { background: '#171412', border: '#c59a4c', accent: '#d9b86d' });
   ensureVhsShelfRows(1);
 }
 
@@ -1242,7 +1541,7 @@ function refreshVhsShelf() {
     : archive.length > capacity
       ? `${capacity} ON SHELF / ${archive.length} TOTAL`
       : `${archive.length}/${capacity} SHOWS`;
-  updateSign(vhsArchiveSign, ['VHS ARCHIVE', shelfLabel], { background: '#171412', border: '#c59a4c', accent: '#d9b86d' });
+  updateSign(vhsArchiveSign, ['SHOW ARCHIVE', shelfLabel], { background: '#171412', border: '#c59a4c', accent: '#d9b86d' });
 }
 
 // Mirrors activeTrophyExhibits()/activeLoungeExhibits(): one browsable stop per
@@ -1349,18 +1648,14 @@ function makeChampionshipBelt(x, y, z, initials, scheme, { scale = 1, rotationY 
 
 // Championship mounts use the actual belt artwork rather than a simplified mesh.
 function makeChampionshipDisplay(x, y, z, beltUrl, label, { width, height }) {
-  const frameWidth = width + .2;
-  const frameHeight = Math.max(height + .58, 1.3);
-  box(frameWidth, frameHeight, .04, materials.gold, x, y, z + .14);
-  box(frameWidth - .18, frameHeight - .18, .08, materials.burgundy, x, y, z + .1);
   const belt = new THREE.Mesh(
-    new THREE.PlaneGeometry(width * .58, height * .58),
+    new THREE.PlaneGeometry(width, height),
     new THREE.MeshBasicMaterial({ map: imageTexture(beltUrl), transparent: true, alphaTest: .02, fog: false, side: THREE.DoubleSide, toneMapped: false }),
   );
-  belt.position.set(x, y + .14, z + .02);
+  belt.name = `wall-mounted-${label.toLowerCase().replace(/\s+/g, '-')}`;
+  belt.position.set(x, y, z);
   belt.rotation.y = Math.PI;
   scene.add(belt);
-  sign([label], 1.35, .26, x, y - .62, z + .05, Math.PI, { background: '#0f0d0c', border: '#d1ae59', accent: '#d1ae59' });
   const spot = new THREE.PointLight(0xffe3b0, 13, 5.2, 2);
   spot.position.set(x, y + 1.4, z - .8);
   scene.add(spot);
@@ -1481,20 +1776,33 @@ function makeAchievementTrophy(definition, index, x, y, z) {
 // An elegant lit shelving unit with a distinct sculpture and nameplate for every award.
 function makeTrophyWall() {
   const wallX = 11.85;
-  const shelfDepth = .55;
+  const shelfDepth = .68;
   const shelfX = wallX - shelfDepth / 2 - .1;
-  const zStart = 1.15;
-  const zEnd = 6.3;
+  const zStart = 1.85;
+  const zEnd = 5.5;
   const zSpan = zEnd - zStart;
+  const zCenter = zStart + zSpan / 2;
   const colPitch = zSpan / TROPHY_SHELF_COLS;
   const shelfYs = [1.25, 2.1, 2.95, 3.8, 4.65];
-  sign(['TROPHY WALL'], 2.1, .5, wallX - .13, 5.55, 3.72, -Math.PI / 2, { background: '#1a1418', border: '#d1ae59', accent: '#d1ae59' });
+  const cabinetHeight = 5.55;
+  const cabinetY = 3.35;
+  const slatTexture = flutedWoodTexture();
+  const slatMaterial = new THREE.MeshStandardMaterial({ map: slatTexture, bumpMap: slatTexture, bumpScale: .018, roughness: .78, metalness: 0 });
+  const shelfLight = new THREE.PointLight(0xffc783, 7, 3.6, 2);
+  const frameX = shelfX - .04;
+  box(.12, cabinetHeight, zSpan + .34, slatMaterial, wallX - .19, cabinetY, zCenter);
+  box(.22, cabinetHeight, .16, materials.walnutGrain, frameX, cabinetY, zStart - .17);
+  box(.22, cabinetHeight, .16, materials.walnutGrain, frameX, cabinetY, zEnd + .17);
+  box(.22, .16, zSpan + .48, materials.walnutGrain, frameX, .66, zCenter);
+  box(.22, .16, zSpan + .48, materials.walnutGrain, frameX, 6.04, zCenter);
+  box(.025, .018, zSpan + .32, materials.brass, frameX - .12, .76, zCenter);
+  box(.025, .018, zSpan + .32, materials.brass, frameX - .12, 5.94, zCenter);
+  sign(['TROPHY WALL'], 2.1, .5, wallX - .13, 5.55, zCenter, -Math.PI / 2, { background: '#1a1418', border: '#d1ae59', accent: '#d1ae59' });
   shelfYs.forEach(shelfY => {
-    box(shelfDepth, .06, zSpan + .3, materials.walnut, shelfX, shelfY, zStart + zSpan / 2);
-    box(shelfDepth + .04, .015, zSpan + .32, materials.gold, shelfX - .02, shelfY + .04, zStart + zSpan / 2);
-    const spot = new THREE.PointLight(0xffdca0, 8, 2.8, 2);
-    spot.position.set(shelfX + .35, shelfY + .6, zStart + zSpan / 2);
-    scene.add(spot);
+    box(shelfDepth, .07, zSpan + .12, materials.walnutGrain, shelfX, shelfY, zCenter);
+    box(.025, .018, zSpan + .08, materials.brass, shelfX - shelfDepth / 2 - .012, shelfY + .045, zCenter);
+    shelfLight.position.set(shelfX - .38, shelfY + .42, zCenter);
+    scene.add(shelfLight.clone());
     for (let col = 0; col < TROPHY_SHELF_COLS; col += 1) {
       const z = zStart + col * colPitch + colPitch / 2;
       const cupX = shelfX - shelfDepth / 2 + .1;
@@ -1705,17 +2013,18 @@ function refreshCareerDisplay() {
 }
 
 function makeTrophyGallery() {
-  box(5.7, .2, 6.5, materials.burgundy, 9.1, .12, 3.7);
-  box(.25, 6.5, 6.5, materials.black, 11.85, 3.2, 3.7);
-  box(.25, 6.5, 6.5, materials.black, 6.25, 3.2, 3.7);
-  box(5.7, 6.5, .25, materials.black, 9.1, 3.2, 6.95);
+  const carpetMaterial = new THREE.MeshStandardMaterial({ map: patternedTexture('#30242a', '#3a2b32', 85), roughness: 1, metalness: 0 });
+  box(5.7, .2, 6.5, carpetMaterial, 9.1, .12, 3.7);
+  box(.25, 6.5, 6.5, materials.trophyWall, 11.85, 3.2, 3.7);
+  box(.25, 6.5, 6.5, materials.trophyWall, 6.25, 3.2, 3.7);
+  box(5.7, 6.5, .25, materials.trophyWall, 9.1, 3.2, 6.95);
 
   // Back wall, centered column: newspapers up top, championship belts below.
   framedClipping('The Archive', 'A Company Is Born', .72, 1.1, 8.15, 4.5, 6.78, Math.PI);
   framedClipping('Match Of The Year', 'Five Stars In The Main Event', .72, 1.1, 9.1, 4.5, 6.78, Math.PI);
   framedClipping('Hall Of Fame', 'The Night Everything Changed', .72, 1.1, 10.05, 4.5, 6.78, Math.PI, { headlineY: 130 });
-  makeChampionshipDisplay(7.85, 2.15, 6.6, worldChampBeltUrl, 'WORLD HEAVYWEIGHT TITLE', { width: 1.68, height: 1.01 });
-  makeChampionshipDisplay(10.35, 2.15, 6.6, tagBeltUrl, 'TAG TEAM TITLE', { width: 1.86, height: .63 });
+  makeChampionshipDisplay(9.1, 2.95, 6.8, worldChampBeltUrl, 'WORLD HEAVYWEIGHT TITLE', { width: 2.79, height: 1.0395 });
+  makeChampionshipDisplay(9.1, 1.55, 6.8, tagBeltUrl, 'TAG TEAM TITLE', { width: 2.79, height: .945 });
 
   // Right wall: the trophy shelving.
   makeTrophyWall();
@@ -1755,18 +2064,18 @@ makeTrophyGallery();
 makeLights();
 
 const stations = [
-  { name: 'CALENDAR WALL', description: 'Plan your week and protect your energy', position: [-8.65, 3.05, -1.35], lookAt: [-8.65, 3.25, -7], panel: 'calendar' },
-  { name: 'FINANCE DESK', description: 'Tickets, cash, pricing, and the company ledger', position: [-1.1, 2.6, -.5], lookAt: [-.8, 1.25, -2.12], panel: 'finances' },
-  { name: 'COMPUTER', description: 'Company intelligence, roster, news, and email', position: [.25, 2.25, .2], lookAt: [.25, 1.35, -2.5], panel: 'computer' },
-  { name: 'BOOKING BOARD', description: 'Build the first card. You do not choose winners.', position: [8.4, 2.7, -.1], lookAt: [8.8, 3.2, -7], panel: 'booking' },
-  { name: 'VHS ARCHIVE', description: 'Every show ever run, in order — pick a tape to relive it', position: [11.3, 2.7, -3.6], lookAt: [12.7, 2.7, -3.6], panel: 'vhsShelf' },
-  { name: 'TROPHY GALLERY', description: 'Archive, milestones, and championship history', position: [8.5, 3.6, -.55], lookAt: [9.1, 2.4, 4.55], panel: 'trophies' },
-  { name: 'THE LOUNGE', description: 'A quiet skyline retreat between big decisions', position: [-7.55, 2.85, 2.15], lookAt: [-7.55, 1.9, 5.6], panel: 'lounge' },
+  { name: 'CALENDAR WALL', description: 'This month on the office calendar', position: [-.65, 3.8, -3.7], lookAt: [-.65, 3.9, -6.93], panel: 'calendar' },
+  { name: 'FINANCE DESK', description: 'Tickets, cash, pricing, and the company ledger', position: [-1.25, 2.7, -2.3], lookAt: [.2, 1.5, -5.35], panel: 'finances' },
+  { name: 'COMPUTER', description: 'Company intelligence, roster, news, and email', position: [.15, 2.75, -2.3], lookAt: [1.55, 1.95, -5.72], panel: 'computer' },
   { name: 'GM LEGACY', description: 'Your career plaque, company emblem, and purchased paintings', position: [-1.1, 3.6, -2.85], lookAt: [3.98, 3.45, -2.85], panel: 'career' },
+  { name: 'BOOKING BOARD', description: 'Build the first card. You do not choose winners.', position: [8.4, 2.7, -.1], lookAt: [8.8, 3.2, -7], panel: 'booking' },
+  { name: 'SHOW ARCHIVE', description: 'Every show ever run, in order — pick a tape to relive it', position: [11.3, 2.7, -3.6], lookAt: [12.7, 2.7, -3.6], panel: 'vhsShelf' },
+  { name: 'TROPHY ROOM', description: 'Archive, milestones, and championship history', position: [8.5, 3.6, -.55], lookAt: [9.1, 2.4, 4.55], panel: 'trophies' },
+  { name: 'THE LOUNGE', description: 'A quiet skyline retreat between big decisions', position: [-7.55, 3.25, 1.5815], lookAt: [-6.6, 1.9, 5.5315], panel: 'lounge' },
 ];
 
 const loungeExhibits = [
-  { name: 'VENDING MACHINE', description: 'Match, Promo, Free Agent, and Variety packs', position: [-6.35, 2.2, 2.15], lookAt: [-5.45, 1.95, 6.2], panel: 'packVending' },
+  { name: 'VENDING MACHINE', description: 'Match, Promo, Free Agent, and Variety packs', position: [-6.8, 2.2, 3.7], lookAt: [-3.43, 1.95, 3.7], panel: 'packVending' },
   { name: 'CARD BOOK', description: 'Your wrestler, Match, and Promo card collection', position: [-7.47, 1.6, 3.7], lookAt: [-7.47, .69, 4.88], panel: 'cardBook' },
   { name: 'LOUNGE CATALOG', description: 'Browse new furniture, records, and arcade upgrades', position: [-7.55, 2.05, 3.05], lookAt: [-8.19, .7, 4.95], panel: 'loungeCatalog' },
   { itemId: 'vinyl-library', name: 'VINYL LIBRARY', description: 'Browse the collection and set the next record', position: [-9.05, 2.45, 3.35], lookAt: [-12.25, 2.65, 3.35], panel: 'vinylLibrary' },
@@ -1809,11 +2118,16 @@ function activeTrophyExhibits() {
 }
 
 function updateStation(instant = false) {
+  camera.up.set(0, 1, 0);
   const selected = stations[station];
   targetPosition.set(...selected.position);
   targetLookAt.set(...selected.lookAt);
-  camera.zoom = selected.name === 'GM LEGACY'
-    ? Math.min(1, 2 * targetPosition.distanceTo(targetLookAt) * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect / 3.5)
+  const displayWidth = selected.panel === 'calendar' ? 2.9
+    : ['computer', 'finances'].includes(selected.panel) ? 5
+      : selected.panel === 'lounge' ? 13.5
+        : selected.name === 'GM LEGACY' ? 3.5 : null;
+  camera.zoom = displayWidth
+    ? Math.min(1, 2 * targetPosition.distanceTo(targetLookAt) * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect / displayWidth)
     : 1;
   camera.updateProjectionMatrix();
   stationName.textContent = selected.name;
@@ -2197,9 +2511,6 @@ function emailBodyHtml() {
   </div>`;
 }
 
-// A side count of 0 (Battle Royale) or 3+ (triple threat, fatal four-way) means a
-// non-winner reads as a non-decisive "other" outcome rather than a straight loss —
-// matches the W-L-O convention used on the wrestler's own career record.
 function statsRecordRows(typeFilter) {
   const shows = getState().history ?? [];
   const rows = new Map();
@@ -2207,22 +2518,21 @@ function statsRecordRows(typeFilter) {
     const type = getMatchType(match.typeId);
     const category = match.typeId === 'battle-royal' ? 'battle-royal' : (type?.slots.perTeam ?? 1) > 1 ? 'tag-team' : 'singles';
     if (typeFilter !== 'all' && category !== typeFilter) return;
-    const sideCount = type?.slots.teams || 0;
-    const multiPerson = sideCount === 0 || sideCount >= 3;
+    const isBattleRoyale = match.typeId === 'battle-royal';
     const winnerIds = match.winnerIds ?? [];
     const decisive = winnerIds.length > 0;
     (match.participantIds ?? []).forEach(id => {
-      const row = rows.get(id) ?? { id, name: getWrestlerById(id)?.name ?? id, wins: 0, losses: 0, other: 0 };
-      if (!decisive) row.other += 1;
-      else if (winnerIds.includes(id)) row.wins += 1;
-      else if (multiPerson) row.other += 1;
-      else row.losses += 1;
+      const row = rows.get(id) ?? { id, name: getWrestlerById(id)?.name ?? id, wins: 0, losses: 0 };
+      if (decisive) {
+        if (winnerIds.includes(id)) row.wins += 1;
+        else if (!isBattleRoyale) row.losses += 1;
+      }
       rows.set(id, row);
     });
   }));
   return [...rows.values()].map(row => {
     const decisiveBouts = row.wins + row.losses;
-    return { ...row, bouts: decisiveBouts + row.other, winPct: decisiveBouts ? Math.round((row.wins / decisiveBouts) * 100) : 0 };
+    return { ...row, bouts: decisiveBouts, winPct: decisiveBouts ? Math.round((row.wins / decisiveBouts) * 100) : 0 };
   }).sort((a, b) => b.wins - a.wins || b.winPct - a.winPct);
 }
 
@@ -2263,7 +2573,7 @@ function statsBeltRows() {
 function statsColumns() {
   if (statsPage === 'belts') return [['name', 'WRESTLER'], ['worldReigns', 'WORLD TITLE WINS'], ['worldDays', 'DAYS HELD'], ['tagReigns', 'TAG TITLE WINS'], ['tagDays', 'DAYS HELD']];
   return statsTypeFilter === 'battle-royal' ? [['name', 'WRESTLER'], ['wins', 'WINS']]
-    : [['name', 'WRESTLER'], ['wins', 'W'], ['losses', 'L'], ['other', 'O'], ['winPct', 'WIN %']];
+    : [['name', 'WRESTLER'], ['wins', 'W'], ['losses', 'L'], ['winPct', 'WIN %']];
 }
 
 function sortStatsRows(rows) {
@@ -2308,7 +2618,7 @@ function statsSectionHtml() {
     ${pageNav}
     ${filterNav}
     <div class="stats-table-wrap"><table class="stats-table"><thead><tr>${statsHeaderHtml()}</tr></thead><tbody>
-      ${rows.length ? rows.map(row => `<tr><td>${profileLinkHtml(row.id, row.name)}</td><td class="stats-good">${row.wins}</td>${winsOnly ? '' : `<td class="stats-bad">${row.losses}</td><td>${row.other}</td><td>${row.winPct}%</td>`}</tr>`).join('') : `<tr><td colspan="${winsOnly ? 2 : 5}">No completed matches yet.</td></tr>`}
+      ${rows.length ? rows.map(row => `<tr><td>${profileLinkHtml(row.id, row.name)}</td><td class="stats-good">${row.wins}</td>${winsOnly ? '' : `<td class="stats-bad">${row.losses}</td><td>${row.winPct}%</td>`}</tr>`).join('') : `<tr><td colspan="${winsOnly ? 2 : 4}">No completed matches yet.</td></tr>`}
     </tbody></table></div>
   </div>`;
 }
@@ -2367,6 +2677,7 @@ function refreshComputerPanel() {
 }
 
 function refreshEmailNotification() {
+  refreshOfficeMonitor();
   const notification = document.querySelector('#email-notification');
   const count = unreadEmailCount();
   notification.classList.toggle('visible', count > 0);
@@ -2387,7 +2698,6 @@ function refreshWorldSigns() {
   const state = getState();
   const show = getShow();
   refreshHud();
-  updateSign(calendarHeaderSign, [`SHOW ${state.showNumber}`, showDateLabel().toUpperCase()], { background: '#201f21', border: '#d0a94f' });
   refreshCalendarWall();
   refreshBookingPoster();
   refreshPpvLogo();
@@ -2544,7 +2854,7 @@ function resolvePanelContent(kind) {
         body: `<div class="terminal-grid"><article><small>WHAT IT MARKS</small><b>${definition?.name ?? 'Company achievement'}</b><p>${definition?.flavor ?? 'A milestone in company history.'}</p></article><article><small>WHEN YOU WON IT</small><b>${earned?.show ?? 'Unknown event'}</b><p>${earnedDate}</p></article></div><button class="return-gallery" data-back="close">← RETURN</button>`,
       };
     },
-    belts: () => ({ title: 'Championship Shrine', kicker: 'CURRENT HOLDERS / REIGNS / PRESTIGE', body: `${bookingPanelHtml().includes('belt-detail-panel') ? titleDetailViewHtml() : championshipShrineHtml()}<button class="return-gallery" data-back="close">← RETURN</button>` }),
+    belts: () => ({ title: 'Championship Shrine', kicker: 'CURRENT HOLDERS / REIGNS / PRESTIGE', body: bookingPanelHtml().includes('belt-detail-panel') ? titleDetailViewHtml() : championshipShrineHtml() }),
     recordbook: () => ({ title: 'The Record Book', kicker: 'COMPANY BESTS / SEASON AWARDS', body: `${recordBookHtml()}<button class="return-gallery" data-back="close">← RETURN</button>` }),
     career: () => ({ title: 'GM Legacy', kicker: 'GM RESUME', body: careerPlaqueHtml() }),
     history: () => {
@@ -2555,7 +2865,7 @@ function resolvePanelContent(kind) {
       const archive = getState().archive ?? [];
       const rows = archive.map((entry, index) => `<article class="bk-history"><header><b>${(entry.eventBranding?.name || entry.showName || 'SHOW').toUpperCase()}</b><span>${entry.date} · Rating ${entry.rating}</span></header><p>${entry.stars}</p><button class="catalog-buy" data-vhs-view="${index}">View Tape →</button></article>`).join('');
       return {
-        title: 'VHS Archive',
+        title: 'Show Archive',
         kicker: `${archive.length} SHOW${archive.length === 1 ? '' : 'S'} ON FILE`,
         body: archive.length ? `<div class="bk-stack">${rows}</div>` : '<p class="catalog-empty">No shows recorded yet — run your first event.</p>',
       };
@@ -2563,7 +2873,7 @@ function resolvePanelContent(kind) {
     vhsDetail: () => {
       const entry = (getState().archive ?? [])[selectedVhsIndex];
       if (!entry) {
-        return { title: 'VHS Archive', kicker: 'TAPE NOT FOUND', body: `<p>That tape is missing from the shelf.</p><button class="return-gallery" data-back="close">← RETURN</button>` };
+        return { title: 'Show Archive', kicker: 'TAPE NOT FOUND', body: `<p>That tape is missing from the shelf.</p><button class="return-gallery" data-back="close">← RETURN</button>` };
       }
       const fillPercent = entry.capacity ? Math.round((entry.attendance / entry.capacity) * 100) : 0;
       const matchRows = (entry.matches ?? []).map(match => {
@@ -2614,6 +2924,7 @@ function openPanel(kind) {
   panelFrame.classList.toggle('card-book-mode', kind === 'cardBook');
   panelFrame.classList.toggle('compact-picker', compactPicker);
   panelFrame.classList.toggle('no-footer', kind === 'calendar');
+  panelFrame.classList.toggle('calendar-wall', kind === 'calendar' && getBookingView() === 'calendar');
   panelFrame.classList.toggle('match-booking', ['booking', 'calendar'].includes(kind) && getBookingView() === 'match');
   panelFrame.classList.toggle('results-poster', ['booking', 'calendar'].includes(kind) && getBookingView() === 'results');
   panel.classList.toggle('computer-workspace', kind === 'computer');
@@ -2836,6 +3147,7 @@ function activateTrophyExhibit() {
 }
 
 function updateLoungeExhibit(instant = false) {
+  camera.up.set(0, 1, 0);
   camera.zoom = 1;
   camera.updateProjectionMatrix();
   const exhibits = activeLoungeExhibits();
@@ -2846,11 +3158,13 @@ function updateLoungeExhibit(instant = false) {
   targetLookAt.set(...exhibit.lookAt);
   if (exhibit.panel === 'packVending') {
     const distance = Math.max(5.4, 3 / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect));
-    targetPosition.copy(targetLookAt).add(new THREE.Vector3(-.9, 1.2, -3.5).normalize().multiplyScalar(distance));
+    targetPosition.copy(targetLookAt).add(new THREE.Vector3(-3.5, 1.2, -.4).normalize().multiplyScalar(distance));
   }
   if (exhibit.panel === 'cardBook') {
     const distance = Math.max(2.4, 1.3 / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect));
-    targetPosition.copy(targetLookAt).add(new THREE.Vector3(0, 1.8, -.12).normalize().multiplyScalar(distance));
+    loungeCardBook.getWorldPosition(targetLookAt);
+    targetLookAt.y += .065;
+    targetPosition.copy(targetLookAt).add(new THREE.Vector3(0, 1, -.22).normalize().multiplyScalar(distance));
   }
   stationName.textContent = exhibit.name;
   stationDescription.textContent = exhibit.description;
@@ -2877,7 +3191,7 @@ function exitLounge() {
 function updateVhsExhibit(instant = false) {
   const exhibits = activeVhsExhibits();
   if (!exhibits.length) {
-    stationName.textContent = 'VHS ARCHIVE';
+    stationName.textContent = 'SHOW ARCHIVE';
     stationDescription.textContent = 'No shows recorded yet — run your first event.';
     stationIndex.textContent = '00 / 00 · ARCHIVE';
     return;
@@ -2900,7 +3214,7 @@ function enterVhsShelf() {
   vhsMode = true;
   vhsExhibit = Math.max(0, activeVhsExhibits().length - 1);
   updateVhsExhibit();
-  showToast('VHS Archive: use left and right to browse, Space to watch the tape');
+  showToast('Show Archive: use left and right to browse, Space to watch the tape');
 }
 
 function exitVhsShelf() {
@@ -2941,6 +3255,7 @@ document.querySelector('#enter-button').addEventListener('click', () => {
   started = true;
   intro.classList.add('hidden');
   app.classList.add('playing');
+  updateStation(true);
   if (!hasNamedCompany()) {
     focusComputerStation();
     terminalTab = 'email';
@@ -3486,18 +3801,22 @@ refreshWorldSigns();
 renderer.setAnimationLoop(() => {
   const delta = Math.min(clock.getDelta(), .05);
   const elapsed = clock.getElapsedTime();
+  if (deskLavaLamp && !deskMotionReduced) updateLavaLamp(deskLavaLamp, elapsed);
   windowReflectionTextures.forEach((texture, index) => {
     texture.offset.x = (elapsed * .0025 + index * .17) % 1;
   });
-  camera.position.lerp(targetPosition, 1 - Math.exp(-delta * 4.8));
-  currentLookAt.lerp(targetLookAt, 1 - Math.exp(-delta * 4.8));
-  camera.lookAt(currentLookAt);
+  const cameraBlend = 1 - Math.exp(-delta * 4.8);
+  camera.position.lerp(targetPosition, cameraBlend);
+  currentLookAt.lerp(targetLookAt, cameraBlend);
+  cameraTargetRotation.lookAt(targetPosition, targetLookAt, camera.up);
+  cameraTargetQuaternion.setFromRotationMatrix(cameraTargetRotation);
+  camera.quaternion.slerp(cameraTargetQuaternion, cameraBlend);
   renderer.render(scene, camera);
 });
 
 addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
-  if (!loungeMode && stations[station].name === 'GM LEGACY') updateStation();
+  if (!loungeMode && ['GM LEGACY', 'THE LOUNGE'].includes(stations[station].name)) updateStation();
   if (loungeMode) updateLoungeExhibit();
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);

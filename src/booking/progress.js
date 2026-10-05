@@ -166,13 +166,16 @@ function awardAccolade(state, wrestlerId, accolade) {
 
 // Season awards fire once a year, right after the calendar's final PPV, and are permanent career credits.
 function evaluateSeason(state, result) {
-  if (state.results.length % SEASON_LENGTH !== 0) return null;
-  const season = state.results.slice(0, SEASON_LENGTH);
-  const seasonNumber = Math.floor(state.results.length / SEASON_LENGTH);
+  const completedDate = new Date(`${state.date}T12:00:00`);
+  const year = completedDate.getFullYear();
+  if (completedDate.getMonth() !== 11 || state.awards.some(award =>
+    (award.recap?.year ?? new Date(award.date).getFullYear()) === year)) return null;
+  const season = state.results.filter(show => new Date(show.date).getFullYear() === year);
+  if (!season.length) return null;
+  const seasonNumber = Math.ceil(state.showNumber / SEASON_LENGTH);
 
   const allMatches = season.flatMap(show => show.matches.map(m => ({ ...m, show: show.showName, date: show.date })));
   const matchOfSeason = [...allMatches].sort((a, b) => b.rating - a.rating)[0];
-  const year = new Date(`${state.date}T12:00:00`).getFullYear();
 
   // Wrestler of the Year: in-ring work (rating, wins), title time held this year, and
   // money drawn, weighed against a rolled outside challenger — a real free agent still
@@ -274,9 +277,9 @@ function evaluateSeason(state, result) {
     };
   }
   const showOfSeason = [...season].sort((a, b) => b.rating - a.rating)[0];
-  const seasonStartShow = state.showNumber - SEASON_LENGTH + 1;
+  const seasonStartShow = state.showNumber - season.length + 1;
   const notablePromos = (state.promoHistory ?? [])
-    .filter(promo => promo.showNumber >= seasonStartShow)
+    .filter(promo => promo.showNumber >= seasonStartShow && promo.showNumber <= state.showNumber)
     .sort((a, b) => (b.matchRating ?? 0) - (a.matchRating ?? 0) || (b.effects?.matchBuzz ?? 0) - (a.effects?.matchBuzz ?? 0))
     .slice(0, 3)
     .map(promo => ({
@@ -349,6 +352,27 @@ function evaluateSeason(state, result) {
   );
 
   state.awards.unshift(awards);
+  const money = amount => amount.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+  state.inbox.dynamic.push({
+    id: `year-review-${year}`,
+    from: 'KAY FABE / PRODUCTION',
+    address: 'kfabe@rivalpromotion.com',
+    subject: `${year} Year in Review`,
+    date: state.date,
+    showNumber: state.showNumber,
+    body: [
+      `${year} annual report: ${season.length} events, ${awards.averageRating} average rating.`,
+      `Attendance: ${awards.recap.totalAttendance.toLocaleString('en-US')}. Revenue: ${money(awards.totalRevenue)}. Profit: ${money(awards.totalProfit)}.`,
+      `Matches: ${awards.recap.totalMatches}. Sellouts: ${awards.recap.sellouts}. Upsets: ${awards.recap.upsets}.`,
+      ...(awards.wrestlerOfSeason ? [`Wrestler of the Year: ${awards.wrestlerOfSeason.name}${awards.wrestlerOfSeason.external ? ' (outside talent)' : ` - ${awards.wrestlerOfSeason.wins} wins in ${awards.wrestlerOfSeason.matches} matches`}.`] : []),
+      ...(awards.matchOfSeason ? [`Match of the Year: ${awards.matchOfSeason.names} at ${awards.matchOfSeason.show} - ${awards.matchOfSeason.stars}.`] : []),
+      ...(awards.showOfSeason ? [`Show of the Year: ${awards.showOfSeason.name} in ${awards.showOfSeason.city} - ${awards.showOfSeason.rating} rating.`] : []),
+      ...notablePromos.map(promo => `Standout promo: ${promo.name} - ${promo.participants.join(' vs. ')}. ${promo.rarity}, match rating ${promo.rating}, hype +${promo.hype}.`),
+      ...champions.map(champion => `Year-end champions: ${champion.holders.join(' & ')} - ${champion.title}, prestige ${champion.prestige}.`),
+      `Outside the arena: President ${awards.recap.world.president}. Box-office leader: ${awards.recap.world.movie}. Biggest-selling music: ${awards.recap.world.album}. NBA champions: ${awards.recap.world.nba}. Super Bowl champions: ${awards.recap.world.nfl}.`,
+      ...upcomingDebuts.map(wrestler => `Coming next year: ${wrestler.name}, debuting in ${wrestler.showsAway} shows.`),
+    ],
+  });
   return awards;
 }
 

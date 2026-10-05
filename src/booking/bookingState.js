@@ -145,7 +145,7 @@ const EMAIL_DEFS = [
   {
     id: 'progression', from: 'KAY FABE / PRODUCTION', address: 'kfabe@rivalpromotion.com', subject: 'Take a look around', date: '1996-05-01',
     available: state => state.career.showsRun >= 4,
-    body: ['Four shows in, and this place is starting to have a history. When you get a minute, take a look at the Computer and the Trophy Gallery.', 'The Computer has your roster, wrestler profiles, rankings, company stats, news, and inbox. It\'s a good place to check how everyone is doing between shows.', 'Over in the Trophy Gallery, you\'ll find the trophies you\'ve earned, company records, and championship history. We have plenty of empty space left to fill. Go have a look.'],
+    body: ['Four shows in, and this place is starting to have a history. When you get a minute, take a look at the Computer and the Trophy Room.', 'The Computer has your roster, wrestler profiles, rankings, company stats, news, and inbox. It\'s a good place to check how everyone is doing between shows.', 'Over in the Trophy Room, you\'ll find the trophies you\'ve earned, company records, and championship history. We have plenty of empty space left to fill. Go have a look.'],
   },
   {
     id: 'free-agent-introduction', from: "RICK O'SHEA / TALENT RELATIONS", address: 'talent@rivalpromotion.com',
@@ -217,7 +217,7 @@ const defaultState = () => {
   const eventBranding = createEventBranding();
   return {
   economyVersion: ECONOMY_VERSION,
-  jobberStatsVersion: 1,
+  jobberStatsVersion: 2,
   bankroll: STARTING_BANKROLL,
   showNumber: 1,
   date: FIRST_SHOW_DATE,
@@ -560,15 +560,17 @@ function load() {
         }
       });
     }
-    if (parsed.jobberStatsVersion !== 1) {
+    if (parsed.jobberStatsVersion !== 2) {
       Object.entries(loaded.roster).forEach(([id, snapshot]) => {
         const wrestler = getWrestlerById(id);
-        if (!wrestler || getDraftTier(wrestler) !== 'jobber' || !snapshot.stats) return;
-        Object.keys(snapshot.stats).forEach(stat => {
-          snapshot.stats[stat] = Math.min(99, snapshot.stats[stat] + 10);
+        if (!wrestler || getDraftTier(wrestler) !== 'jobber') return;
+        if (snapshot.stats) Object.keys(snapshot.stats).forEach(stat => {
+          const previous = parsed.jobberStatsVersion === 1 ? snapshot.stats[stat] : Math.min(99, snapshot.stats[stat] + 10);
+          snapshot.stats[stat] = Math.max(1, previous - 3);
         });
+        if (Number.isFinite(snapshot.popularity)) snapshot.popularity = Math.min(100, snapshot.popularity + 6);
       });
-      loaded.jobberStatsVersion = 1;
+      loaded.jobberStatsVersion = 2;
     }
     return loaded;
   } catch {
@@ -581,7 +583,10 @@ function load() {
 function applyRosterSnapshot() {
   Object.entries(state.roster).forEach(([id, snapshot]) => {
     const w = getWrestlerById(id);
-    if (w) Object.assign(w, snapshot);
+    if (w) {
+      Object.assign(w, snapshot);
+      w.record = { w: w.record.w, l: w.record.l };
+    }
   });
 }
 
@@ -1024,7 +1029,7 @@ export function confirmFoundingRoster() {
   // Fixed rarity slots keep the inaugural pack from collapsing into an all-common dump.
   const gimmicks = rollGimmickPack(FOUNDING_GIMMICK_PACK, { weights: FOUNDING_GIMMICK_WEIGHTS, distinctByRarity: true });
   state.cards.promoDrawCycles.common = [...new Set([...(state.cards.promoDrawCycles.common ?? []), 'custom'])];
-  const promos = ['custom', ...rollStarterPromoPack(FOUNDING_PROMO_PACK)];
+  const promos = ['custom', 'custom', 'custom', ...rollStarterPromoPack(FOUNDING_PROMO_PACK)];
   addGimmickCards(state.cards, gimmicks);
   addPromoCards(state.cards, promos);
   state.cards.gimmickLog = [{ year: 1, cards: gimmicks }, ...(state.cards.gimmickLog ?? [])].slice(0, 12);
@@ -1138,7 +1143,7 @@ function pruneTeams() {
   state.teams = state.teams
     .filter(team => team.active && team.memberIds.length === 2 && team.memberIds.every(isSigned))
     .filter(team => team.createdExplicitly || (team.uses ?? 0) > 0
-      || (team.record?.w ?? 0) + (team.record?.l ?? 0) + (team.record?.o ?? 0) > 0
+      || (team.record?.w ?? 0) + (team.record?.l ?? 0) > 0
       || team.name !== team.memberIds.map(id => getWrestlerById(id).name.split(' ').at(-1)).join(' & '))
     .sort((first, second) => (second.lastUsedShow ?? 0) - (first.lastUsedShow ?? 0)
       || (second.lastUsedOrder ?? 0) - (first.lastUsedOrder ?? 0)
@@ -1168,7 +1173,7 @@ function rememberTeam(memberIds, name = '') {
       name: teamName || members.map(id => getWrestlerById(id).name.split(' ').at(-1)).join(' & '),
       memberIds: members,
       chemistry: computeChemistry(members[0], members[1])?.score ?? 50,
-      record: { w: 0, l: 0, o: 0 },
+      record: { w: 0, l: 0 },
       active: true,
       uses: 0,
     };
@@ -1185,6 +1190,7 @@ function rememberTeam(memberIds, name = '') {
 
 function syncBookedTeams() {
   state.teams.forEach(team => {
+    team.record = { w: team.record?.w ?? 0, l: team.record?.l ?? 0 };
     if (team.lastUsedShow != null) return;
     const depth = (state.history ?? []).findIndex(show => (show.matches ?? []).some(match => {
       const type = getMatchType(match.typeId);
@@ -1197,7 +1203,7 @@ function syncBookedTeams() {
       team.lastUsedShow = show.showNumber ?? state.showNumber - depth - 1;
       team.lastUsedDate = show.date;
     }
-    team.uses ??= (team.record?.w ?? 0) + (team.record?.l ?? 0) + (team.record?.o ?? 0);
+    team.uses ??= (team.record?.w ?? 0) + (team.record?.l ?? 0);
   });
   pruneTeams();
 }
@@ -1238,10 +1244,11 @@ function updateTeamRecords(result) {
       if (side.length !== 2) return;
       const team = rememberTeam(side);
       if (!team) return;
-      team.record ??= { w: 0, l: 0, o: 0 };
-      if (!match.winnerIds?.length) team.record.o += 1;
-      else if (team.memberIds.every(id => match.winnerIds.includes(id))) team.record.w += 1;
-      else team.record.l += 1;
+      team.record ??= { w: 0, l: 0 };
+      if (match.winnerIds?.length) {
+        if (team.memberIds.every(id => match.winnerIds.includes(id))) team.record.w += 1;
+        else team.record.l += 1;
+      }
       team.uses = (team.uses ?? 0) + 1;
     });
   });
@@ -1685,8 +1692,8 @@ export function getWrestlerHistory(wrestlerId) {
         ? match.sideNames?.filter((name, side) => side !== ownSide).join(' / ')
         : match.participantIds.filter(id => id !== wrestlerId).map(id => getWrestlerById(id)?.name ?? id).join(' & ');
       const draw = ['draw', 'time-limit draw'].includes(match.outcome);
-      const resultCode = match.resultCodes?.[wrestlerId] ?? match.effects?.find(effect => effect.id === wrestlerId)?.resultCode
-        ?? (draw ? 'D' : match.winnerIds?.includes(wrestlerId) ? 'W' : match.winnerIds?.length ? 'L' : 'NC');
+      const resultCode = draw ? 'D' : match.winnerIds?.includes(wrestlerId) ? 'W'
+        : match.typeId === 'battle-royal' || !match.winnerIds?.length ? 'NC' : 'L';
       const winner = Array.isArray(match.winnerNames) ? match.winnerNames.join(' & ') : match.winnerNames;
       rows.push({
         event: show.showName ?? show.name ?? 'House Show', date: show.date,
@@ -2452,7 +2459,6 @@ function runHouseShow(card = null, date = state.date) {
       if (!wrestler) return;
       if (effect.resultCode === 'W') wrestler.record.w += 1;
       else if (effect.resultCode === 'L') wrestler.record.l += 1;
-      else if (effect.resultCode === 'O') wrestler.record.o += 1;
       const developmentRoll = Math.random();
       const popGain = developmentRoll < 0.45 || developmentRoll >= 0.85 ? 1 + (Math.random() < 0.2 ? 1 : 0) : 0;
       const skillGains = [];
@@ -2809,7 +2815,7 @@ export function forceRetire(wrestlerId) {
   });
   state.retirees.unshift({ id: wrestlerId, name: wrestler.name, age, finalRecord: { ...wrestler.record }, reason: 'forced' });
   state.accolades[wrestlerId] = state.accolades[wrestlerId] ?? [];
-  state.accolades[wrestlerId].push(`Retired at age ${age} — career record ${wrestler.record.w}-${wrestler.record.l}-${wrestler.record.o}`);
+  state.accolades[wrestlerId].push(`Retired at age ${age} — career record ${wrestler.record.w}-${wrestler.record.l}`);
 
   state.family.emailSeq += 1;
   state.inbox.dynamic = state.inbox.dynamic ?? [];
@@ -2820,7 +2826,7 @@ export function forceRetire(wrestlerId) {
     subject: `${wrestler.name} is hanging them up`,
     date: state.date,
     body: [
-      `${wrestler.name} is done. ${age} years old, ${wrestler.record.w}-${wrestler.record.l}-${wrestler.record.o} across ${state.company?.name || 'the company'}.`,
+      `${wrestler.name} is done. ${age} years old, ${wrestler.record.w}-${wrestler.record.l} across ${state.company?.name || 'the company'}.`,
       wrestler.popularity >= 60
         ? 'There are people who have never bought a ticket to see anyone else. We should send them out properly.'
         : 'Quiet exit. Not everybody gets a retirement tour.',
@@ -3718,13 +3724,14 @@ export function runShow() {
       w.momentum = Math.max(-5, Math.min(5, w.momentum + effect.momentumDelta));
       if (effect.resultCode === 'W') w.record.w += 1;
       else if (effect.resultCode === 'L') w.record.l += 1;
-      else if (effect.resultCode === 'O') w.record.o += 1;
       if (effect.resultCode === 'W') setRelationship(w.id, 1);
       else if (effect.resultCode === 'L' && w.hidden.ego >= 65) setRelationship(w.id, -2);
-      const streakType = effect.resultCode === 'W' ? 'win' : effect.resultCode === 'L' ? 'loss' : w.streak.type;
-      w.streak = w.streak.type === streakType
-        ? { type: streakType, count: w.streak.count + 1 }
-        : { type: streakType, count: 1 };
+      if (effect.resultCode === 'W' || effect.resultCode === 'L') {
+        const streakType = effect.resultCode === 'W' ? 'win' : 'loss';
+        w.streak = w.streak.type === streakType
+          ? { type: streakType, count: w.streak.count + 1 }
+          : { type: streakType, count: 1 };
+      }
       snapshotWrestler(w);
       const drain = drainBase + overuseTier(w.id, state.history).staminaPenalty;
       state.stamina[w.id] = Math.max(15, staminaFor(w.id) - drain);
