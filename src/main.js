@@ -33,7 +33,7 @@ import { bookingPanelHtml, bookingPanelKicker, handleBookingEvent, handleBooking
 import { exportCareerResume } from './booking/legacyShare.js';
 import { reignDaysHeld } from './booking/bookingPanel.js';
 import {
-  getSignedRoster, getState, getShow, getLeadUp, showDateLabel, isDraftComplete, getProjection, staminaFor, moraleFor, startNewGame,
+  getSignedRoster, getPowerRankings, getState, getShow, getLeadUp, showDateLabel, isDraftComplete, getProjection, staminaFor, moraleFor, startNewGame,
   exportGameData, importGameData, buyLoungeItem, LOUNGE_ITEMS, getGMLevel, getInbox, unreadEmailCount, markEmailRead,
   getCompanyIdentity, companyBrandedText, hasNamedCompany, setCompanyIdentity, forceTragedy, getOwnedVinyls, getNowPlayingVinyl, setNowPlayingVinyl, buyVinyl, forceNWO, isChampion,
   getCribPacks, buyPack, buyCustomWrestlerPack, getWrestlerHistory, getTutorialPacks, claimTutorialPack, getPurchasedPackReveal,
@@ -2645,17 +2645,8 @@ function computerBodyHtml() {
     return `<div class="terminal-grid">${stories.map(story => `<article><small>${story.kicker}</small><b>${story.headline}</b><p>${story.body}</p></article>`).join('')}</div>`;
   }
   if (terminalTab === 'rankings') {
-    const state = getState();
-    const champions = new Set(state.titles.world?.holders ?? []);
-    const ranked = getSignedRoster().map(w => ({ w, score: w.popularity + w.momentum * 4 + w.record.w * 1.5 - w.record.l * .5 + (champions.has(w.id) ? 12 : 0) })).sort((a, b) => {
-      const championOrder = Number(champions.has(b.w.id)) - Number(champions.has(a.w.id));
-      const contenderOrder = Number(b.w.id === state.numberOneContenderId) - Number(a.w.id === state.numberOneContenderId);
-      return championOrder || contenderOrder || b.score - a.score;
-    });
-    let contenderRank = 0;
-    const rankingRows = ranked.map(({ w }) => {
-      const rank = champions.has(w.id) ? 'Champion' : `#${++contenderRank}`;
-      return `<tr><td>${rank}</td><td>${profileLinkHtml(w.id, w.name)}</td><td>${recordString(w.record)}</td><td>${momentumLabel(w.momentum)}</td></tr>`;
+    const rankingRows = getPowerRankings().map(({ w, champion, rank }) => {
+      return `<tr><td>${champion ? 'Champion' : `#${rank}`}</td><td>${profileLinkHtml(w.id, w.name)}</td><td>${recordString(w.record)}</td><td>${momentumLabel(w.momentum)}</td></tr>`;
     }).join('');
     return `<div class="term-modern computer-list-screen"><header><small>CONTENDER INDEX</small><b>THE TITLE PICTURE</b></header><div class="ranking-table-wrap"><table class="computer-ranking-table"><thead><tr><th>RANK</th><th>WRESTLER</th><th>RECORD</th><th>MOMENTUM</th></tr></thead><tbody>${rankingRows}</tbody></table></div></div>`;
   }
@@ -2914,12 +2905,13 @@ function openPanel(kind) {
   // A pack break is a full-screen ceremony, not a modal. Flagged with a real class
   // rather than a :has() selector so the layout never depends on selector support.
   const packBreak = Boolean(panelContent.querySelector('.pack-break'));
-  const bookingBoardHome = kind === 'booking' && getBookingView() === 'card';
+  const bookingBoardHome = !packBreak && ['booking', 'calendar'].includes(kind) && getBookingView() === 'card';
   panel.classList.toggle('pack-break-mode', packBreak);
   panelFrame.classList.toggle('pack-break-mode', packBreak);
   panelFrame.classList.toggle('booking-board-home', bookingBoardHome);
   panelFrame.classList.toggle('trophy-room', TROPHY_ROOM_KINDS.has(kind));
   panelFrame.classList.toggle('career-plaque-mode', kind === 'career');
+  panelFrame.classList.toggle('finance-office-mode', kind === 'finances');
   panelFrame.classList.toggle('computer-screen', kind === 'computer');
   panelFrame.classList.toggle('card-book-mode', kind === 'cardBook');
   panelFrame.classList.toggle('compact-picker', compactPicker);
@@ -3583,7 +3575,7 @@ panelContent.addEventListener('click', event => {
       panelContent.scrollTop = 0;
       return;
     }
-    const returnTo = { kind: currentPanelKind, label: panelTitle.textContent };
+    const returnTo = { kind: currentPanelKind, label: profileLink.closest('.house-pick-screen') ? 'Wrestler Select' : panelTitle.textContent };
     terminalTab = 'roster';
     openPanel('computer');
     selectedWrestlerId = profileLink.dataset.profile;

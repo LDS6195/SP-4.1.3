@@ -9,10 +9,10 @@ import { getVenueById, homeFieldTier } from '../data/venues.js';
 import { getMatchType, getStake, getMatchLength } from '../data/matchTypes.js';
 import { CHAMPIONSHIPS, getChampionship, defenseStatus, titleMatchCompatible } from '../data/championships.js';
 import {
-  getPromoTier, getStagePackage, getTicketTier, getEntrancePackage, getExtra, getCelebrity,
+  getPromoTier, getStagePackage, getTicketTier,
 } from '../data/production.js';
 import {
-  concessionsPerHead, demandModFromRatio, goodwillDemandMult, merchPriceFactor, ticketPriceRatio, eventBroadcastGuarantee,
+  concessionsPerHead, demandModFromRatio, goodwillDemandMult, merchPriceFactor, homeVideoPerHead, ticketPriceRatio, eventBroadcastGuarantee, FINANCE_VARIANCE, financeForecastRanges,
 } from '../data/finances.js';
 import { gimmickRarity, GIMMICK_FATIGUE, isBasicMatchType } from '../data/cards.js';
 import { marketHypeForVenue, marketDemandMultiplier } from './marketHype.js';
@@ -132,19 +132,9 @@ export function projectMatch(match, context = {}) {
   }
 
   // --- presentation spend -------------------------------------------------
-  const entrances = (match.entrances || []).map(getEntrancePackage);
-  const extras = (match.extras || []).map(getExtra).filter(Boolean);
-  const celebrity = getCelebrity(match.celebrityId);
-  const entranceCost = entrances.reduce((sum, e) => sum + e.cost, 0);
-  const extrasCost = extras.reduce((sum, e) => sum + e.cost, 0);
-  const presentationSpend = entranceCost + extrasCost + celebrity.cost + type.cost + stake.cost;
-
-  const presentationScore =
-    entrances.reduce((sum, e) => sum + e.presentation, 0) +
-    celebrity.presentation +
-    stage.presentation * 0.4;
-
-  const safetyNet = extras.reduce((sum, e) => sum + (e.safety ?? 0), 0);
+  const presentationSpend = type.cost + stake.cost;
+  const presentationScore = 0;
+  const safetyNet = 0;
 
   if (!roster.length) {
     return {
@@ -210,7 +200,6 @@ export function projectMatch(match, context = {}) {
 
   // --- momentum, stakes, presentation -------------------------------------
   add('Momentum coming in', average(roster.map(w => w.momentum)) * 2.2, 'momentum');
-  add('Entrance & production spend', clamp(presentationScore * 0.32, 0, 14), 'presentation');
 
   // --- morale ---------------------------------------------------------------
   const morale = average(roster.map(w => moraleLookup(w.id)));
@@ -342,7 +331,7 @@ export function projectMatch(match, context = {}) {
   const high = clamp(Math.round(expected + variance), 0, 100);
 
   // --- buzz (marquee value) -------------------------------------------------
-  let buzz = type.buzz + stake.buzz + celebrity.draw;
+  let buzz = type.buzz + stake.buzz;
   if (rarity) {
     buzz += rarity.buzzBonus * payoff;
   }
@@ -351,8 +340,6 @@ export function projectMatch(match, context = {}) {
     buzz += match.promoCardEffect.matchBuzz;
     notes.push(`Promo card raised match hype by ${match.promoCardEffect.matchBuzz}.`);
   }
-  buzz += extras.reduce((sum, e) => sum + (e.buzz ?? 0), 0);
-  buzz += entrances.reduce((sum, e) => sum + e.heat, 0);
   buzz += (starPower - 60) * 0.45;
   if (venue) {
     const homeDraws = roster.filter(w => homeFieldTier(w, venue));
@@ -554,9 +541,6 @@ function showFreshness(show, history, matchStaleness) {
     penalty += 14;
     reasons.push('Same building as your last show — the local market is already tapped.');
   }
-  if (history.slice(0, 2).every(s => s && s.promoId === show.promoId) && history.length >= 2) {
-    penalty += 4;
-  }
 
   const styles = show.matches
     .flatMap(matchParticipantIds)
@@ -602,8 +586,8 @@ export function projectShow(show, options = {}) {
   } = options;
 
   const venue = getVenueById(show.venueId);
-  const promo = getPromoTier(show.promoId);
-  const stage = getStagePackage(show.stageId);
+  const promo = { ...getPromoTier('word-of-mouth'), cost: 0, demand: 1, buzz: 0, risk: 0 };
+  const stage = { ...getStagePackage('house'), cost: 0 };
   const ticket = getTicketTier(show.ticketId);
 
   const matchStaleness = show.matches.map((match, index) => stalenessForMatch(match, show, history, index));
@@ -710,7 +694,6 @@ export function projectShow(show, options = {}) {
     { label: 'Average in-ring quality (main event counts double)', delta: Math.round(weightedQuality * 0.78), kind: 'matches' },
     { label: `Crowd heat at ${fillPercent}% capacity`, delta: Math.round(fillPercent * 0.12), kind: 'crowd' },
     { label: `Fan goodwill (${finances.goodwill}/100)`, delta: goodwillRating, kind: 'pricing' },
-    { label: `${stage.name} presentation`, delta: Math.round(stage.presentation * 0.25), kind: 'presentation' },
     { label: 'Repetitive booking', delta: -Math.round(freshness.penalty * 0.35), kind: 'freshness' },
   ].filter(f => f.delta);
 
@@ -736,16 +719,17 @@ export function projectShow(show, options = {}) {
   );
   const gate = Math.round(attendance * ticketPrice);
   const concessions = Math.round(attendance * concessionsPerHead(prices));
-  const merch = Math.round(attendance * (3.4 + cardStarPower / 14) * merchPriceFactor(prices));
+  const merch = Math.round(attendance * (3.4 + cardStarPower / 14) * merchPriceFactor(prices) * (.75 + rating / 130));
   const tvBase = venue ? venue.tvReach * 168000 : 0;
   const televisionGuarantee = eventBroadcastGuarantee(venue, rating);
   const television = Math.max(
     televisionGuarantee,
     Math.round(tvBase * (1 + stage.tvBonus) * clamp(rating / 62, 0.35, 1.8)),
   );
-  const homeVideo = Math.round(attendance * .18 * (prices.homeVideo ?? 0));
+  const homeVideo = Math.round(attendance * homeVideoPerHead(prices, rating));
   const revenue = gate + concessions + merch + homeVideo + television;
   const profit = revenue - totalCost;
+  const financeRanges = financeForecastRanges({ attendance, capacity, totalCost, revenue: { gate, concessions, merch, homeVideo, television } });
   const profitRange = {
     low: Math.round((revenue - television) * 0.78 + Math.max(
       eventBroadcastGuarantee(venue, ratingLow),
@@ -753,6 +737,8 @@ export function projectShow(show, options = {}) {
     ) - totalCost),
     high: Math.round(revenue * 1.22 - totalCost),
   };
+  profitRange.low = Math.min(profitRange.low, financeRanges.profit.low);
+  profitRange.high = Math.max(profitRange.high, financeRanges.profit.high);
 
   const injuryExposure = Math.round(
     (1 - matches.reduce((acc, m) => acc * (1 - m.injuryRisk / 100), 1)) * 100,
@@ -796,8 +782,8 @@ export function projectShow(show, options = {}) {
     marketHype: marketHypeForVenue(marketHype, venue),
     marketDemandMultiplier: marketDemandMultiplier(marketHype, venue),
     attendanceRange: {
-      low: Math.round(attendance * 0.84),
-      high: Math.min(capacity, Math.round(attendance * 1.14)),
+      low: Math.round(attendance * FINANCE_VARIANCE.attendance.low),
+      high: Math.min(capacity, Math.round(attendance * FINANCE_VARIANCE.attendance.high)),
     },
     capacity,
     fillPercent,

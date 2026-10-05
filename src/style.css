@@ -790,7 +790,10 @@ kbd { padding: 2px 4px; border: 1px solid rgba(211,168,78,.65); color: var(--gol
 .panel-frame.match-booking > header #close-panel { display: none; }
 .panel-frame.compact-picker > header { display: none; }
 .panel-frame.compact-picker #panel-content { padding-top: 14px; }
-.panel-frame.booking-board-home > header h2 { display: none; }
+.panel-frame.booking-board-home { position: relative; }
+.panel-frame.booking-board-home > header { position: absolute; top: 8px; right: 8px; z-index: 5; padding: 0; border: 0; background: transparent; }
+.panel-frame.booking-board-home > header > div { display: none; }
+.panel-frame.booking-board-home #panel-content { padding-top: 14px; }
 /* The results poster carries its own event header; keep only the close button. */
 .panel-frame.results-poster { position: relative; }
 .panel-frame.results-poster > header { position: absolute; top: 8px; right: 10px; z-index: 5; padding: 0; border: 0; background: none; }

@@ -1,15 +1,12 @@
 // Booking Board UI. Simple by default — venue, matchups, done. Everything deeper
-// (production spend, stipulations, add-ons, full P&L) lives behind a fold.
+// (stipulations and full P&L) lives behind a fold.
 
 import { wrestlers, getWrestlerById, computeChemistry, momentumLabel, recordString, getDraftTier, GAME_START_DATE } from '../data/wrestlers.js';
 import { venues, getVenueById, homeFieldTier, venueRequiredLevel, venueUnlocked } from '../data/venues.js';
 import {
   getMatchType, getStake,
 } from '../data/matchTypes.js';
-import {
-  PROMO_TIERS, STAGE_PACKAGES, ENTRANCE_PACKAGES, MATCH_EXTRAS,
-  CELEBRITY_GUESTS, getPromoTier, getStagePackage, getEntrancePackage, getCelebrity, getExtra, productionUnlocked,
-} from '../data/production.js';
+import { getTicketTier } from '../data/production.js';
 import {
   projectMatch, matchParticipantIds, stalenessForMatch, ratingLabel, freshnessLabel,
 } from './bookingEngine.js';
@@ -20,7 +17,7 @@ import { ACTIVITIES, getActivity, TRAINABLE_STATS, BUILDUP_WEEKS } from '../data
 import { PROMO_PARTNER_FEE } from '../data/promos.js';
 import { TIER_LABELS } from '../data/draft.js';
 import { gimmickRarity, isBasicMatchType, BASIC_MATCH_TYPES as BASIC_TYPE_IDS } from '../data/cards.js';
-import { PRICE_CATEGORIES, homeVideoFormat, suitesUnlocked, ticketPriceRatio } from '../data/finances.js';
+import { PRICE_CATEGORIES, homeVideoFormat, suitesUnlocked, ticketPriceRatio, applyGoodwillDrift, defaultPrices, financeForecastRanges, merchSalesForecast } from '../data/finances.js';
 import { PPV_CALENDAR, PPV_LOGOS, logoUrl } from '../data/calendar.js';
 import { autoBook } from './autoBook.js';
 import * as booking from './bookingState.js';
@@ -28,7 +25,7 @@ import worldChampBeltUrl from '../../images/world-champ-belt.png?url';
 import tagBeltUrl from '../../images/tag-belt.png?url';
 import { wrestlerImageUrl } from '../data/wrestlerImages.js';
 import { companyLogoUrl } from '../data/companyLogo.js';
-import { createElement, Share2, Download, ArrowLeft, Check, Map as MapIcon } from 'lucide';
+import { createElement, Share2, Download, ArrowLeft, Check, RotateCcw, Map as MapIcon } from 'lucide';
 import { marketHeatmapHtml } from './marketHeatmap.js';
 import { marketHypeForVenue, hypeTier, MARKET_LOCATIONS } from './marketHype.js';
 
@@ -153,13 +150,11 @@ function matchRowHtml(match, index, p, total) {
   const type = getMatchType(match.typeId);
   const stake = getStake(match.stakeId);
   const title = match.titleId ? getChampionship(match.titleId) : null;
-  const extrasCount = match.extras.length + (match.celebrityId !== 'none' ? 1 : 0);
   const sub = [
     type?.name ?? 'Unset',
     title ? booking.companyBrandedText(title.name) : (stake.id === 'none' ? null : stake.name),
     p.valid ? `${p.minutes} min` : null,
     p.valid ? compactMoney(p.cost) : null,
-    extrasCount ? `${extrasCount} add-on${extrasCount > 1 ? 's' : ''}` : null,
   ].filter(Boolean).join(' · ');
 
   return `<article class="bk-match ${index === total - 1 ? 'is-main' : ''}">
@@ -206,8 +201,7 @@ function cardViewHtml() {
       <hr />
       <span><small>VENUE</small><b>-${money(p.expenses.venue)}</b></span>
       <span><small>TALENT</small><b>-${money(p.expenses.talent)}</b></span>
-      <span><small>PRODUCTION</small><b>-${money(p.expenses.production + p.expenses.staging)}</b></span>
-      <span><small>ADVERTISING</small><b>-${money(p.expenses.promotion)}</b></span>
+      <span><small>MATCH SETUP</small><b>-${money(p.expenses.production)}</b></span>
       <span><small>COMPANY OVERHEAD</small><b>-${money(p.expenses.overhead)}</b></span>
       <hr />
       <span class="total ${p.profit >= 0 ? 'good' : 'bad'}"><small>EXPECTED NET</small><b>${signedRange(p.profitRange)}</b></span>
@@ -248,11 +242,6 @@ function cardViewHtml() {
         ${booking.getMaxMatches() < booking.MAX_MATCHES ? `<p class="bk-storyline-desc">${booking.getMaxMatches() === booking.MIN_MATCHES ? 'Three-match cards keep the early roster from feeling repetitive.' : 'Four-match cards give a maturing roster room to breathe.'} The next match slot needs ${booking.experienceUntilExtraMatchSlot()} more GM XP.</p>` : ''}
         ${show.matches.map((match, index) => matchRowHtml(match, index, p.matches[index], show.matches.length)).join('')}
 
-        <button class="bk-strip subtle" data-bk="view" data-value="promotion">
-          <small>PROMOTION &amp; PRESENTATION</small>
-          <b>${p.promo.name} · ${p.stage.name} · ${p.ticket.name}</b>
-          <span>${compactMoney(p.promo.cost + p.stage.cost)} spend · ${money(p.ticketPrice)} average ticket</span>
-        </button>
       </section>
 
       <aside class="bk-side">
@@ -352,30 +341,6 @@ function venueViewHtml() {
 // ---------------------------------------------------------------------------
 // Promotion / staging / ticketing
 // ---------------------------------------------------------------------------
-function promotionViewHtml() {
-  const show = booking.getShow();
-  const p = booking.getProjection();
-  return `<div class="bk">
-    ${backBar('Promotion & presentation', 'None of this changes who wins. It changes how many people care.')}
-    <div class="bk-inline-projection">
-      <span><small>ATTENDANCE</small><b>${p.attendance.toLocaleString()}</b></span>
-      <span><small>FILL</small><b>${p.fillPercent}%</b></span>
-      <span><small>AVG TICKET</small><b>${money(p.ticketPrice)}</b></span>
-      <span><small>GATE</small><b>${compactMoney(p.revenue.gate)}</b></span>
-      <span class="${p.profit >= 0 ? 'good' : 'bad'}"><small>EXPECTED NET</small><b>${signedRange(p.profitRange)}</b></span>
-    </div>
-    <div class="bk-stack">
-      <section>
-        <small class="bk-label">ADVERTISING BUY</small>
-        <div class="bk-grid tight">${PROMO_TIERS.map(t => optionCard('promo', t.id, show.promoId === t.id, t.name, t.cost, `Demand ${Math.round(t.demand * 100)}% · Buzz ${t.buzz >= 0 ? '+' : ''}${t.buzz}`, t.description, t.unlockLevel)).join('')}</div>
-      </section>
-      <section>
-        <small class="bk-label">STAGING &amp; BROADCAST LOOK</small>
-        <div class="bk-grid tight">${STAGE_PACKAGES.map(t => optionCard('stage', t.id, show.stageId === t.id, t.name, t.cost, `Presentation ${t.presentation >= 0 ? '+' : ''}${t.presentation} · TV ${t.tvBonus >= 0 ? '+' : ''}${Math.round(t.tvBonus * 100)}%`, t.description, t.unlockLevel)).join('')}</div>
-      </section>
-    </div>
-  </div>`;
-}
 
 // ---------------------------------------------------------------------------
 // Match editor — participants and match type up front, the rest folded away
@@ -544,7 +509,6 @@ function matchViewHtml() {
   const venue = getVenueById(show.venueId);
   const projection = projectMatch(match, {
     venue,
-    stage: getStagePackage(show.stageId),
     isMainEvent: index === show.matches.length - 1,
     position: index,
     cardSize: show.matches.length,
@@ -555,22 +519,16 @@ function matchViewHtml() {
   const perTeam = type.slots.teams ? type.slots.perTeam : type.slots.max;
   const bookableTitles = booking.bookableTitlesFor(match.id);
 
-  const entranceSummary = [...new Set(match.entrances.map(id => getEntrancePackage(id).name))].join(' / ');
-  const extrasSummary = [
-    ...match.extras.map(id => getExtra(id)?.name).filter(Boolean),
-    match.celebrityId !== 'none' ? getCelebrity(match.celebrityId).name : null,
-  ].filter(Boolean);
 
   const detail = `
     ${qualityBar(projection.quality)}
     ${meter('Chemistry', projection.chemistry)}
     ${meter('Star Power', projection.starPower)}
-    ${meter('Presentation', Math.min(100, projection.presentationScore), 100)}
     ${meter('Injury Risk', projection.injuryRisk, 40, projection.injuryRisk > 12 ? 'bad' : '')}
     ${readList(projection.factors, 8)}
     <div class="bk-ledger">
       <span><small>TALENT PURSES</small><b>${money(projection.purses)}</b></span>
-      <span><small>PRODUCTION</small><b>${money(projection.presentationSpend)}</b></span>
+      <span><small>MATCH SETUP</small><b>${money(projection.presentationSpend)}</b></span>
       <span><small>RUNTIME</small><b>${projection.minutes} min</b></span>
       <span><small>STAMINA DRAIN</small><b>${projection.drain}</b></span>
     </div>
@@ -614,21 +572,6 @@ function matchViewHtml() {
         </section>
         ${gimmickSlotHtml(match)}
 
-        ${fold('match-production', 'Entrances, add-ons & celebrity',
-          `${entranceSummary}${extrasSummary.length ? ` · ${extrasSummary.join(', ')}` : ''} · ${compactMoney(projection.presentationSpend)}`, `
-          <small class="bk-label">ENTRANCE PRODUCTION</small>
-          <div class="bk-entrances">
-            ${match.teams.map((_, teamIndex) => `
-              <div>
-                <small>${type.slots.teams ? `SIDE ${String.fromCharCode(65 + teamIndex)}` : 'ALL ENTRANTS'}</small>
-                <div class="bk-chips">${ENTRANCE_PACKAGES.map(e => `<button class="bk-chip ${match.entrances[teamIndex] === e.id ? 'selected' : ''} ${productionUnlocked(e, booking.getGMLevel()) ? '' : 'locked'}" data-bk="entrance" data-match="${match.id}" data-team="${teamIndex}" data-value="${e.id}" ${productionUnlocked(e, booking.getGMLevel()) ? '' : 'disabled'}>${e.name}${e.cost ? `<em>${compactMoney(e.cost)}</em>` : ''}${productionUnlocked(e, booking.getGMLevel()) ? '' : `<em>LV ${e.unlockLevel}</em>`}</button>`).join('')}</div>
-              </div>`).join('')}
-          </div>
-          <small class="bk-label spaced">PRODUCTION ADD-ONS</small>
-          <div class="bk-grid tight">${MATCH_EXTRAS.map(e => optionCard('extra', e.id, match.extras.includes(e.id), e.name, e.cost, `Presentation +${e.presentation}${e.buzz ? ` · Buzz +${e.buzz}` : ''}${e.safety ? ` · Safety +${e.safety}` : ''}`, e.description, e.unlockLevel)).join('')}</div>
-          <small class="bk-label spaced">CELEBRITY GUEST</small>
-          <div class="bk-grid tight">${CELEBRITY_GUESTS.map(c => optionCard('celebrity', c.id, match.celebrityId === c.id, c.name, c.cost, c.id === 'none' ? '' : `Draw +${c.draw}`, c.description)).join('')}</div>
-        `)}
       </div>
 
       <aside class="bk-side">
@@ -690,11 +633,8 @@ function rosterViewHtml() {
   if (!match) return cardViewHtml();
   const currentId = match.teams[team]?.[index];
   if (currentId && !view.rosterCandidate) view.rosterCandidate = currentId;
-  const rows = booking.getSignedRoster()
-    .map(w => {
-      return { w, booked: booking.isBooked(w.id), injury: booking.injuryFor(w.id) };
-    })
-    .sort((a, b) => b.w.popularity - a.w.popularity);
+  const rows = booking.getPowerRankings()
+    .map(({ w, rank, champion }) => ({ w, rank, champion, booked: booking.isBooked(w.id), injury: booking.injuryFor(w.id) }));
 
   const candidate = getWrestlerById(view.rosterCandidate);
 
@@ -702,9 +642,10 @@ function rosterViewHtml() {
     <div class="bk-back"><button data-bk="roster-cancel">← MATCH</button><div><b>Book Wrestler</b><small>${positionLabel(booking.getShow().matches.indexOf(match), booking.getShow().matches.length)} · ${getMatchType(match.typeId).name}</small></div></div>
     <div class="house-roster-select">
     <div class="house-roster-grid">
-      ${rows.map(({ w, booked, injury }) => `
-        <button class="house-roster-tile ${booked ? 'booked' : ''} ${view.rosterCandidate === w.id ? 'selected' : ''}" data-bk="roster-highlight" data-value="${w.id}" ${injury ? 'disabled' : ''}>
+      ${rows.map(({ w, rank, champion, booked, injury }) => `
+        <button type="button" class="house-roster-tile ${booked ? 'booked' : ''} ${view.rosterCandidate === w.id ? 'selected' : ''}" data-bk="${view.rosterCandidate === w.id ? 'roster-confirm' : 'roster-highlight'}" data-value="${w.id}" ${injury ? 'disabled' : ''}>
           <span class="house-roster-photo">
+            <span class="house-roster-rank ${champion ? 'champion' : ''}" aria-label="${champion ? 'Champion' : `Power rank ${rank}`}" title="${champion ? 'Champion' : `Power ranking #${rank}`}">${champion ? 'C' : `#${rank}`}</span>
             ${wrestlerImageUrl(w) ? `<img src="${wrestlerImageUrl(w)}" alt="${w.name}">` : `<span class="house-roster-initials">${w.name.split(' ').map(part => part[0]).slice(0, 2).join('')}</span>`}
             ${injury ? `<em class="house-roster-badge">INJURED</em>` : booked ? `<em class="house-roster-badge">BOOKED</em>` : view.rosterCandidate === w.id ? `<em class="house-roster-badge">SELECTED</em>` : ''}
           </span>
@@ -712,9 +653,9 @@ function rosterViewHtml() {
         </button>`).join('')}
     </div>
     <div class="house-roster-detail">
-      ${candidate ? `<div class="house-roster-detail-main"><div><div class="house-roster-detail-heading"><b><button type="button" class="profile-link inline" data-profile="${candidate.id}" title="View wrestler profile">${candidate.name}</button></b><span class="house-roster-record">Record ${recordString(candidate.record)}</span></div><small>${candidate.style} · POP ${candidate.popularity} · STA ${booking.staminaFor(candidate.id)} · ${momentumLabel(candidate.momentum)}</small><p>${candidate.bio}</p></div></div>
+      ${candidate ? `<div class="house-roster-detail-main"><div><div class="house-roster-detail-heading"><b><button type="button" class="profile-link inline" data-profile="${candidate.id}" title="View wrestler profile">${candidate.name}</button></b><span class="house-roster-record">(${recordString(candidate.record)})</span></div><small>${candidate.style} · POP ${candidate.popularity} · STA ${booking.staminaFor(candidate.id)} · ${momentumLabel(candidate.momentum)}</small><p>${candidate.bio}</p></div></div>
       <div class="bk-taste"><span>STR ${candidate.stats.strength}</span><span>AGI ${candidate.stats.agility}</span><span>STA ${candidate.stats.stamina}</span><span>TECH ${candidate.stats.technique}</span><span>CHA ${candidate.stats.charisma}</span><span>TGH ${candidate.stats.toughness}</span></div>
-      <button class="bk-primary" data-bk="roster-confirm">ADD TO MATCH</button>` : '<p class="bk-empty">Choose a wrestler to see their details.</p>'}
+      <div class="house-roster-actions"><button type="button" class="bk-primary" data-bk="roster-confirm">ADD TO MATCH</button><button type="button" class="house-roster-profile" data-profile="${candidate.id}">VIEW PROFILE</button></div>` : '<p class="bk-empty">Choose a wrestler to see their details.</p>'}
     </div>
     </div>
   </div>`;
@@ -1027,34 +968,65 @@ export function careerPlaqueHtml() {
   </div>`;
 }
 
+const financeText = value => String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
+
+export function financeForecastHtml() {
+  const state = booking.getState();
+  const projection = booking.getProjection();
+  const finances = booking.getFinances();
+  const gmLevel = booking.getGMLevel();
+  const ratio = ticketPriceRatio(finances.prices, gmLevel);
+  const trust = applyGoodwillDrift(finances.goodwill, ratio);
+  const ranges = financeForecastRanges(projection);
+  const leaders = merchSalesForecast(booking.getSignedRoster(), state.show, projection, finances.prices.merch);
+  const key = `${state.showNumber}:${state.show.eventId}`;
+  if (view.financeBaseline?.key !== key) view.financeBaseline = { key, profit: projection.profit, fill: projection.fillPercent, trust };
+  const baseline = view.financeBaseline;
+  const delta = (value, suffix = '') => `${value > 0 ? '+' : ''}${Math.round(value).toLocaleString()}${suffix}`;
+  const gauge = (label, value, readout, note, change = null) => `<div class="finance-meter"><div><small>${label}</small><b>${readout}</b></div><div class="finance-meter-track" role="meter" aria-label="${label}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(Math.max(0, Math.min(100, value)))}"><i style="width:${Math.max(0, Math.min(100, value))}%"></i></div><span>${note}${change !== null ? `<em class="${change < 0 ? 'negative' : 'positive'}">${delta(change)}</em>` : ''}</span></div>`;
+  const netGauge = 50 + projection.profit / Math.max(10000, projection.totalCost) * 35;
+  const lowFill = projection.capacity ? ranges.attendance.low / projection.capacity * 100 : 0;
+  const highFill = projection.capacity ? ranges.attendance.high / projection.capacity * 100 : 0;
+  const leaderScore = leaders[0]?.score ?? 1;
+  const row = (label, value, range) => `<div><span>${label}</span><b>${money(value)}</b><small>${money(range.low)} – ${money(range.high)}</small></div>`;
+  return `<div class="finance-live-overview">
+    <div class="finance-net ${projection.profit < 0 ? 'negative' : 'positive'}"><small>EXPECTED PPV NET</small><strong>${money(projection.profit)}</strong><span class="finance-net-delta">${delta(projection.profit - baseline.profit)} vs. opening forecast</span><div class="finance-uncertainty-band"><small>SHOW-DAY WORKING RANGE</small><b>${signedRange(ranges.profit)}</b></div></div>
+    <div class="finance-market"><span><small>PRICING POSITION</small><b>${ratio > 1.08 ? 'Premium' : ratio < .92 ? 'Value' : 'Market rate'}</b></span><span><small>AVAILABLE CASH</small><b>${money(state.bankroll)}</b></span><span><small>SHOW COST</small><b>${money(projection.totalCost)}</b></span></div>
+  </div>
+  <section class="finance-meters" aria-label="Upcoming PPV impact">
+    ${gauge('Turnout', projection.fillPercent, `${projection.fillPercent}%`, `${Math.round(lowFill)}–${Math.round(highFill)}% likely fill`, projection.fillPercent - baseline.fill)}
+    ${gauge('Fan goodwill', trust, `${trust}/100`, `${finances.goodwill}/100 now · after PPV`, trust - baseline.trust)}
+    ${gauge('Net margin', netGauge, money(projection.profit), `${money(ranges.profit.low)} downside`)}
+    ${gauge('Sell-through', Math.min(100, projection.revenue.merch / Math.max(finances.prices.merch, 1) / Math.max(projection.attendance, 1) * 100), `${Math.round(projection.revenue.merch / Math.max(finances.prices.merch, 1)).toLocaleString()} shirts`, `${money(projection.revenue.merch)} merch forecast`)}
+  </section>
+  <div class="finance-analysis">
+    <section class="finance-merch"><header><div><small>MERCH FORECAST</small><h3>Top five sellers</h3></div><span>EST. SHIRTS / REVENUE</span></header><ol>${leaders.length ? leaders.map((leader, index) => `<li><span class="finance-merch-rank">0${index + 1}</span><div class="finance-merch-copy"><b>${financeText(leader.name)}</b><small>POP ${leader.popularity} · MOM ${delta(leader.momentum)}${leader.booked ? ' · ON THE PPV' : ''}</small><div class="finance-merch-bar"><i style="width:${leader.score / leaderScore * 100}%"></i></div></div><div class="finance-merch-value"><b>${leader.units.toLocaleString()}</b><small>${money(leader.revenue)}</small></div></li>`).join('') : '<li class="finance-merch-empty">No signed roster.</li>'}</ol></section>
+    <section class="finance-ledger"><header><small>PPV INCOME</small><h3>Revenue mix</h3></header><div>${row('Tickets', projection.revenue.gate, ranges.revenue.gate)}${row('Concessions', projection.revenue.concessions, ranges.revenue.concessions)}${row('Merchandise', projection.revenue.merch, ranges.revenue.merch)}${row(homeVideoFormat(state.date), projection.revenue.homeVideo, ranges.revenue.homeVideo)}${row('Television', projection.revenue.television, ranges.revenue.television)}${row('Total revenue', projection.revenue.total, ranges.total)}</div></section>
+  </div>`;
+}
+
 export function financePanelHtml() {
   const state = booking.getState();
   const projection = booking.getProjection();
   const finances = booking.getFinances();
   const gmLevel = booking.getGMLevel();
-  const venue = projection.venue;
-  const ratio = ticketPriceRatio(finances.prices, gmLevel);
-  const ratioLabel = ratio > 1.08 ? 'PREMIUM' : ratio < .92 ? 'VALUE' : 'FAIR';
+  const company = booking.getCompanyIdentity();
   const videoLabel = homeVideoFormat(state.date);
   const categories = PRICE_CATEGORIES.map(category => {
     const suiteLocked = category.id === 'suite' && !suitesUnlocked(gmLevel);
     const label = category.id === 'homeVideo' ? videoLabel : category.name;
     return `<label class="finance-price ${suiteLocked ? 'locked' : ''}">
-      <span><b>${label}</b><small>${suiteLocked ? 'Unlocks at GM level 2' : `$${category.min}-$${category.max}`}</small></span>
-      <input type="range" min="${category.min}" max="${category.max}" value="${finances.prices[category.id]}" data-finance-price="${category.id}" ${suiteLocked ? 'disabled' : ''}>
+      <span><b>${label}</b><small>${suiteLocked ? 'GM LEVEL 2' : `MARKET $${category.fair}`}</small></span>
+      <input type="range" min="${category.min}" max="${category.max}" step="1" value="${finances.prices[category.id]}" data-finance-price="${category.id}" aria-label="${label} price" aria-valuetext="$${finances.prices[category.id]}" ${suiteLocked ? 'disabled' : ''}>
       <output>$${finances.prices[category.id]}</output>
     </label>`;
   }).join('');
-  const revenue = projection.revenue;
-  const row = (label, value) => `<span><small>${label}</small><b>${money(value)}</b></span>`;
   return `<div class="finance-office">
     <header class="finance-head">
-      <div><small>COMPANY-WIDE PRICING STRATEGY</small><p>Set standing prices. Fans remember how they are treated.</p></div>
-      <div class="finance-goodwill"><small>FAN GOODWILL</small><b>${finances.goodwill}<em>/100</em></b><i><span style="width:${finances.goodwill}%"></span></i></div>
+      <div class="finance-brand"><img src="${companyLogoUrl(company.acronym, company.name, company.logoStyle, company.logoAccent)}" alt="${financeText(company.acronym)}"><div><small>${financeText(company.name)} · FINANCE OFFICE</small><h2>Work the numbers</h2><span>SHOW ${state.showNumber} · ${financeText(state.show.name)} · ${financeText(projection.venue?.city ?? 'VENUE PENDING')}</span></div></div>
+      <div class="finance-head-status"><span class="finance-optional">OPTIONAL</span><small>SHOW-DAY VOLATILITY</small><b>HIGH</b></div>
     </header>
-    <div class="finance-market"><span><small>MARKET POSITION</small><b>${ratioLabel}</b></span><span><small>CURRENT VENUE</small><b>${venue?.name ?? 'No venue selected'}</b></span><span><small>DEMAND EFFECT</small><b>${Math.round((projection.attendance / Math.max(projection.capacity, 1)) * 100)}% fill projected</b></span></div>
-    <section class="finance-prices">${categories}</section>
-    <section class="finance-ledger"><header><small>NEXT SHOW PROJECTION</small><b>${state.show.name}</b></header><div>${row('Gate Receipts', revenue.gate)}${row('Concessions', revenue.concessions)}${row('T-Shirts', revenue.merch)}${row(videoLabel, revenue.homeVideo)}${row('Television', revenue.television)}${row('TOTAL REVENUE', revenue.total)}<span><small>EXPECTED NET RANGE</small><b>${signedRange(projection.profitRange)}</b></span></div></section>
+    <div class="finance-workbench"><section class="finance-pricing"><header><div><small>STANDING PRICES</small><h3>Find your balance</h3></div><button type="button" class="finance-reset" data-bk="finance-reset" title="Set standard baseline prices, not optimized prices" aria-label="Auto-set standard baseline prices">${createElement(RotateCcw, { width: 16, height: 16, 'aria-hidden': 'true' }).outerHTML}<span>Auto-set</span></button></header><div class="finance-prices">${categories}</div></section><div class="finance-live" data-finance-forecast>${financeForecastHtml()}</div></div>
   </div>`;
 }
 
@@ -1462,7 +1434,7 @@ function houseShowBuilderHtml() {
   const card = view.houseShow;
   const picker = view.housePick;
   if (picker) return houseShowRosterSelectHtml(card, picker);
-  return `<p class="bk-storyline-desc">Book a 3-match live event. House shows use stripped-down production, limited match types, and no entrances or titles. They usually lose money and hit stamina hard, but the matches count and the wrestlers get steady reps and small popularity gains.</p>
+  return `<p class="bk-storyline-desc">Book a 3-match live event. House shows use limited match types and no titles. They usually lose money and hit stamina hard, but the matches count and the wrestlers get steady reps and small popularity gains.</p>
     <div class="bk-stack">${card.matches.map((match, matchIndex) => {
       const type = getMatchType(match.typeId);
       return `<article class="bk-history">
@@ -2219,7 +2191,6 @@ function bookingViewHtml() {
   if (view.name === 'ppv-customize') return ppvCustomizeViewHtml();
   if (view.name === 'venue') return venueViewHtml();
   if (view.name === 'heatmap') return `<div class="bk">${backBar('Markets', '')}${marketHeatmapHtml({ hype: booking.getState().marketHype, show: booking.getShow(), gmLevel: booking.getGMLevel(), scope: view.heatmapScope ?? 'usa', selectedCity: view.heatmapCity, projectVenue: venue => booking.getProjection(venue.id) })}</div>`;
-  if (view.name === 'promotion') return promotionViewHtml();
   if (view.name === 'match') return matchViewHtml();
   if (view.name === 'roster') return rosterViewHtml();
   if (view.name === 'history') return historyViewHtml();
@@ -2376,17 +2347,14 @@ export function handleBookingEvent(event, { toast = () => {}, onShowRun = () => 
       view.name = 'card';
       toast(`Booked into ${getVenueById(value)?.city}`);
       return true;
-    case 'promo':
-      booking.setShowField('promoId', value);
-      toast(`Advertising: ${getPromoTier(value).name}`);
-      return true;
-    case 'stage':
-      booking.setShowField('stageId', value);
-      toast(`Staging: ${getStagePackage(value).name}`);
-      return true;
     case 'ticket':
       booking.setShowField('ticketId', value);
       toast(`Pricing: ${getTicketTier(value).name}`);
+      return true;
+    case 'finance-reset':
+      for (const [category, price] of Object.entries(defaultPrices())) {
+        if (category !== 'suite' || suitesUnlocked(booking.getGMLevel())) booking.setFinancePrice(category, price);
+      }
       return true;
     case 'add-match':
       booking.addMatch();
@@ -2871,16 +2839,6 @@ export function handleBookingEvent(event, { toast = () => {}, onShowRun = () => 
       }
       return true;
     }
-    case 'celebrity':
-      booking.setMatchField(view.matchId, 'celebrityId', value);
-      if (value !== 'none') toast(`${getCelebrity(value).name} booked — ${money(getCelebrity(value).cost)}`);
-      return true;
-    case 'extra':
-      booking.toggleExtra(view.matchId, value);
-      return true;
-    case 'entrance':
-      booking.setEntrance(target.dataset.match, Number(target.dataset.team), value);
-      return true;
     case 'pick-slot':
       view.slot = {
         matchId: target.dataset.match,
@@ -2969,7 +2927,11 @@ export function handleBookingInput(event) {
     const saved = booking.setFinancePrice(categoryId, Number(event.target.value));
     if (saved) {
       const output = event.target.closest('.finance-price')?.querySelector('output');
-      if (output) output.textContent = `$${event.target.value}`;
+      const price = booking.getFinances().prices[categoryId];
+      if (output) output.textContent = `$${price}`;
+      event.target.setAttribute('aria-valuetext', `$${price}`);
+      const forecast = event.target.closest('.finance-office')?.querySelector('[data-finance-forecast]');
+      if (forecast) forecast.innerHTML = financeForecastHtml();
     }
     return false;
   }

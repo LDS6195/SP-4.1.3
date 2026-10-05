@@ -29,7 +29,7 @@ import { applyProgress, createCareerState, restoreCareerLedger, updateHouseShowC
 import { createLeadUpState, refillLeadUp, applyActivity, skipWeek, jumpToEvent, isBuildupDone } from './leadUp.js';
 import { runAgingPass } from './aging.js';
 import { applyGoodwillDrift, clampPrice, createFinanceState, ticketPriceRatio } from '../data/finances.js';
-import { getPromoTier, getStagePackage, getEntrancePackage, getExtra, productionUnlocked } from '../data/production.js';
+import { getStagePackage } from '../data/production.js';
 import { generatePromo } from './promoEngine.js';
 import { PROMO_PARTNER_FEE } from '../data/promos.js';
 import { pickTragedyCause } from '../data/tragedy.js';
@@ -140,7 +140,7 @@ const EMAIL_DEFS = [
   {
     id: 'booking', from: 'RIVAL PROMOTION NETWORK', address: 'desk@rp-1996.com', subject: 'The card is a set of tradeoffs', date: 'JAN 05, 1996',
     available: state => state.draft.complete && (state.showNumber >= 2 || (state.leadUp?.week ?? 1) > 1),
-    body: ['Match types, entrances, add-ons, venues, and advertising all change the shape of a night. Expensive choices can raise the ceiling, but they also make a bad night more expensive.', 'A projection is a read, not a promise. The best cards usually have a reason to exist, a rested roster, and enough money left to run the next one.'],
+    body: ['Good matchups, meaningful stakes, and the right building are what make the night. Big crowds are great, but the talent and venue bills still need to be paid.', 'A projection is a read, not a promise. The best cards usually have a reason to exist, a rested roster, and enough money left to run the next one.'],
   },
   {
     id: 'progression', from: 'KAY FABE / PRODUCTION', address: 'kfabe@rivalpromotion.com', subject: 'Take a look around', date: '1996-05-01',
@@ -936,6 +936,20 @@ export function getSignedRoster() {
   return wrestlers
     .filter(w => signed.has(w.id))
     .sort((a, b) => b.popularity - a.popularity || a.name.localeCompare(b.name));
+}
+
+export function getPowerRankings() {
+  const ranked = getSignedRoster().map(w => {
+    const champion = isChampion(w.id).length > 0;
+    const score = w.popularity + w.momentum * 4 + w.record.w * 1.5 - w.record.l * .5 + (champion ? 12 : 0);
+    return { w, champion, score };
+  }).sort((first, second) => {
+    const championOrder = Number(second.champion) - Number(first.champion);
+    const contenderOrder = Number(second.w.id === state.numberOneContenderId) - Number(first.w.id === state.numberOneContenderId);
+    return championOrder || contenderOrder || second.score - first.score || first.w.name.localeCompare(second.w.name);
+  });
+  let contenderRank = 0;
+  return ranked.map(entry => ({ ...entry, rank: entry.champion ? null : ++contenderRank }));
 }
 
 function eligiblePool() {
@@ -3332,10 +3346,8 @@ function applyNwoOutcome(outcome, date) {
 // Show-level mutations
 // ---------------------------------------------------------------------------
 export function setShowField(field, value) {
-  if (!['name', 'venueId', 'promoId', 'stageId', 'ticketId'].includes(field)) return;
+  if (!['name', 'venueId', 'ticketId'].includes(field)) return;
   if (field === 'venueId' && !venueUnlocked(venues.find(venue => venue.id === value), getGMLevel())) return false;
-  if (field === 'promoId' && !productionUnlocked(getPromoTier(value), getGMLevel())) return false;
-  if (field === 'stageId' && !productionUnlocked(getStagePackage(value), getGMLevel())) return false;
   state.show[field] = value;
   persist();
   return true;
@@ -3441,7 +3453,7 @@ function buildTeams(type, existingIds) {
 
 export function setMatchField(matchId, field, value) {
   const match = getMatch(matchId);
-  if (!match || !['stakeId', 'lengthId', 'celebrityId'].includes(field)) return;
+  if (!match || !['stakeId', 'lengthId'].includes(field)) return;
   if (field === 'stakeId' && value === 'title') return false;
   match[field] = value;
   if (field === 'stakeId' && value !== 'title') match.titleId = null;
@@ -3450,21 +3462,11 @@ export function setMatchField(matchId, field, value) {
 }
 
 export function setEntrance(matchId, teamIndex, packageId) {
-  const match = getMatch(matchId);
-  if (!match || !productionUnlocked(getEntrancePackage(packageId), getGMLevel())) return false;
-  match.entrances[teamIndex] = packageId;
-  persist();
-  return true;
+  return false;
 }
 
 export function toggleExtra(matchId, extraId) {
-  const match = getMatch(matchId);
-  if (!match || !productionUnlocked(getExtra(extraId), getGMLevel())) return false;
-  match.extras = match.extras.includes(extraId)
-    ? match.extras.filter(e => e !== extraId)
-    : [...match.extras, extraId];
-  persist();
-  return true;
+  return false;
 }
 
 // Slot assignment: a wrestler already booked elsewhere on the card is moved, not cloned.

@@ -89,10 +89,6 @@ export function autoBook() {
   if (worldChampion || !worldTitle.holders.length) {
     booking.setMatchTitle(mainId, 'world');
   }
-  booking.setEntrance(mainId, 0, 'pyro');
-  booking.setEntrance(mainId, 1, 'spotlight');
-  booking.toggleExtra(mainId, 'vignette');
-  booking.toggleExtra(mainId, 'commentary');
 
   // --- semi-main: a hot non-title singles match to set up next month ---------
   const semiA = take(pool);
@@ -103,7 +99,6 @@ export function autoBook() {
   booking.setMatchType(semiId, 'singles');
   booking.assignWrestler(semiId, 0, 0, semiA.id);
   booking.assignWrestler(semiId, 1, 0, semiB.id);
-  booking.setEntrance(semiId, 0, 'spotlight');
 
   // --- second match: a tag bout --------------------------------------------
   const midId = matches[1].id;
@@ -130,11 +125,6 @@ export function autoBook() {
     booking.assignWrestler(openerId, teamIndex, 0, w.id);
   });
 
-  // --- production: spend in proportion to the bankroll --------------------------
-  const rich = state.bankroll > 3000000;
-  const introductoryRun = booking.getGMLevel() === 1 && state.showNumber <= 3;
-  booking.setShowField('promoId', introductoryRun ? 'word-of-mouth' : rich ? 'regional-tv' : 'local-radio');
-  booking.setShowField('stageId', introductoryRun ? 'bare' : rich ? 'broadcast' : 'house');
   booking.setShowField('ticketId', 'standard');
 
   return { ok: true, venue, mainEvent: `${anchor.name} vs. ${rival.name}` };

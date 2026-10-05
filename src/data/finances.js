@@ -112,3 +112,52 @@ export function homeVideoPerHead(prices, rating) {
   const qualityMult = clamp(rating / 70, 0.4, 1.6);
   return perHeadSpend(prices.homeVideo, fair) * 0.32 * qualityMult;
 }
+
+export const FINANCE_VARIANCE = {
+  attendance: { low: .72, high: 1.28 },
+  concessions: { low: .75, high: 1.3 },
+  merch: { low: .7, high: 1.4 },
+  homeVideo: { low: .75, high: 1.4 },
+};
+
+export function financeForecastRanges(projection) {
+  const attendance = Math.max(0, projection.attendance);
+  const lowAttendance = Math.round(attendance * FINANCE_VARIANCE.attendance.low);
+  const highAttendance = Math.min(projection.capacity, Math.round(attendance * FINANCE_VARIANCE.attendance.high));
+  const lowRatio = attendance ? lowAttendance / attendance : 0;
+  const highRatio = attendance ? highAttendance / attendance : 0;
+  const ranges = {};
+  for (const category of ['gate', 'concessions', 'merch', 'homeVideo', 'television']) {
+    const revenue = Math.max(0, projection.revenue[category] ?? 0);
+    const variance = FINANCE_VARIANCE[category] ?? { low: 1, high: 1 };
+    ranges[category] = category === 'television'
+      ? { low: Math.round(revenue * .8), high: Math.round(revenue * 1.25) }
+      : { low: Math.round(revenue * lowRatio * variance.low), high: Math.round(revenue * highRatio * variance.high) };
+  }
+  const low = Object.values(ranges).reduce((sum, range) => sum + range.low, 0);
+  const high = Object.values(ranges).reduce((sum, range) => sum + range.high, 0);
+  return { attendance: { low: lowAttendance, high: highAttendance }, revenue: ranges, total: { low, high }, profit: { low: low - projection.totalCost, high: high - projection.totalCost } };
+}
+
+export function merchSalesForecast(roster, show, projection, merchPrice) {
+  const matchBuzz = new Map();
+  show.matches.forEach((match, index) => {
+    for (const id of match.teams.flat().filter(Boolean)) {
+      matchBuzz.set(id, Math.max(matchBuzz.get(id) ?? 0, projection.matches[index]?.buzz ?? 0));
+    }
+  });
+  const scored = roster.map(wrestler => {
+    const booked = matchBuzz.has(wrestler.id);
+    const popularity = clamp(Number(wrestler.popularity) || 0, 0, 100);
+    const momentum = clamp(Number(wrestler.momentum) || 0, -25, 50);
+    const hype = clamp(Number(wrestler.hype ?? wrestler.buzz) || 0, 0, 100);
+    const score = Math.max(1, popularity + momentum * 1.5 + hype * .35)
+      * (booked ? 1.35 : 1) + Math.max(0, matchBuzz.get(wrestler.id) ?? 0) * .35;
+    return { id: wrestler.id, name: wrestler.name, popularity, momentum, booked, score };
+  });
+  const totalScore = scored.reduce((sum, wrestler) => sum + wrestler.score, 0);
+  const revenue = Math.max(0, projection.revenue.merch ?? 0);
+  const price = Math.max(1, Number(merchPrice) || 1);
+  return scored.sort((first, second) => second.score - first.score || first.name.localeCompare(second.name))
+    .slice(0, 5).map(wrestler => ({ ...wrestler, share: totalScore ? wrestler.score / totalScore : 0, revenue: Math.floor(revenue * wrestler.score / totalScore), units: Math.floor(revenue * wrestler.score / totalScore / price) }));
+}

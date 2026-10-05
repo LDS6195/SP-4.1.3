@@ -6,8 +6,7 @@
 import { getDraftTier, getWrestlerById } from '../data/wrestlers.js';
 import { getMatchType, getStake, getMatchLength } from '../data/matchTypes.js';
 import { getChampionship, titleMatchCompatible } from '../data/championships.js';
-import { getCelebrity, getEntrancePackage } from '../data/production.js';
-import { eventBroadcastGuarantee } from '../data/finances.js';
+import { eventBroadcastGuarantee, FINANCE_VARIANCE } from '../data/finances.js';
 import { matchParticipantIds, ratingLabel, gradeFor } from './bookingEngine.js';
 
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
@@ -232,16 +231,8 @@ export function simulateMatch(match, projection, context = {}) {
   }
 
   // --- celebrity fallout ----------------------------------------------------
-  const celebrity = getCelebrity(match.celebrityId);
-  let celebrityNote = null;
-  if (celebrity.id !== 'none') {
-    celebrityNote = {
-      text: `${celebrity.name} at ringside gave the match a mainstream feel the press picked up on.`,
-      bonus: 3,
-    };
-  }
-
-  const finalRating = clamp(rating + (celebrityNote?.bonus ?? 0), 0, 100);
+  const celebrityNote = null;
+  const finalRating = clamp(rating, 0, 100);
 
   // --- championship outcome --------------------------------------------------
   // The belt only changes hands on a decisive finish. A champion who gets counted
@@ -375,7 +366,7 @@ export function simulateMatch(match, projection, context = {}) {
     participantIds: ids,
     sideIds: sides.map(side => [...side]),
     sideNames: sides.map(side => side.map(id => getWrestlerById(id)?.name ?? id).join(' & ')),
-    entrances: (match.entrances || []).map(id => getEntrancePackage(id).name),
+    entrances: [],
     winnerNames: draw ? null : winnerNames,
     loserNames,
     winnerIds: draw ? [] : winners.members.map(w => w.id),
@@ -494,7 +485,7 @@ const LESSONS = {
   matchmaking: 'Keep the ability gap tight. Mismatches read as squashes and squashes do not draw.',
   stakes: 'Big stipulations raise expectations. Only hang them on workers who can carry the weight.',
   position: 'Card position matters. Main events need genuine stars at the top.',
-  presentation: 'Production spend buys presentation, but it cannot rescue a bad matchup.',
+  presentation: 'Match cards can lift a suitable matchup, but they cannot rescue poor chemistry.',
 };
 
 function buildReport(projection, results, rating) {
@@ -542,7 +533,7 @@ export function simulateShow(show, projection, context = {}) {
 
   // Actual attendance wobbles around the projection.
   const attendance = Math.round(
-    clamp(projection.attendance * rand(0.84, 1.14), 0, projection.capacity),
+    clamp(projection.attendance * rand(FINANCE_VARIANCE.attendance.low, FINANCE_VARIANCE.attendance.high), 0, projection.capacity),
   );
   const fillPercent = projection.capacity ? Math.round((attendance / projection.capacity) * 100) : 0;
 
@@ -572,12 +563,12 @@ export function simulateShow(show, projection, context = {}) {
   const tvRating = (tvViewers / 960000).toFixed(1);
 
   const gate = Math.round(attendance * projection.ticketPrice);
-  const concessions = Math.round(attendance * (projection.revenue.concessions / Math.max(projection.attendance, 1)) * rand(0.88, 1.14));
+  const concessions = Math.round(attendance * (projection.revenue.concessions / Math.max(projection.attendance, 1)) * rand(FINANCE_VARIANCE.concessions.low, FINANCE_VARIANCE.concessions.high));
   const merch = Math.round(
-    attendance * (3.4 + projection.cardStarPower / 14) *
-    (0.75 + rating / 130) * (projection.revenue.merch / Math.max(projection.attendance * (3.4 + projection.cardStarPower / 14), 1)) * rand(0.82, 1.22),
+    attendance * (projection.revenue.merch / Math.max(projection.attendance, 1)) *
+    ((.75 + rating / 130) / (.75 + projection.rating / 130)) * rand(FINANCE_VARIANCE.merch.low, FINANCE_VARIANCE.merch.high),
   );
-  const homeVideo = Math.round(attendance * (projection.revenue.homeVideo / Math.max(projection.attendance, 1)) * (0.75 + rating / 130) * rand(0.84, 1.18));
+  const homeVideo = Math.round(attendance * (projection.revenue.homeVideo / Math.max(projection.attendance, 1)) * ((.75 + rating / 130) / (.75 + projection.rating / 130)) * rand(FINANCE_VARIANCE.homeVideo.low, FINANCE_VARIANCE.homeVideo.high));
   const television = Math.max(
     eventBroadcastGuarantee(projection.venue, rating),
     Math.round((projection.venue?.tvReach ?? 0.5) * 168000 * (1 + projection.stage.tvBonus) * clamp(rating / 62, 0.35, 1.8) * rand(0.88, 1.15)),
