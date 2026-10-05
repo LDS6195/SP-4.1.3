@@ -2833,7 +2833,7 @@ export function forceRetire(wrestlerId) {
   (state.show.matches ?? []).forEach(match => {
     match.teams = match.teams.map(side => side.filter(id => id !== wrestlerId));
   });
-  state.retirees.unshift({ id: wrestlerId, name: wrestler.name, age, finalRecord: { ...wrestler.record }, reason: 'forced' });
+  state.retirees.unshift({ id: wrestlerId, name: wrestler.name, age, date: state.date, finalRecord: { ...wrestler.record }, reason: 'forced' });
   state.accolades[wrestlerId] = state.accolades[wrestlerId] ?? [];
   state.accolades[wrestlerId].push(`Retired at age ${age} — career record ${wrestler.record.w}-${wrestler.record.l}`);
 

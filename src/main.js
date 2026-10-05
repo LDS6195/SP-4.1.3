@@ -2092,9 +2092,8 @@ function activeLoungeExhibits() {
 
 const galleryExhibits = [
   { name: 'TROPHY WALL', description: 'Every milestone the company has earned, on display', position: [6.8, 3.9, 4.6], lookAt: [11.6, 2.4, 3.2], panel: 'milestones', light: [10.6, 4.4, 3.7] },
-  { name: 'NEWS ARCHIVE', description: 'Classic matches, landmark events, and the Hall of Fame', position: [9.1, 3.4, 2.4], lookAt: [9.1, 4.5, 6.8], panel: 'archive', light: [9.1, 4.6, 6.3] },
   { name: 'CHAMPIONSHIP SHRINE', description: 'Current holders, reigns, and title prestige', position: [9.1, 2.2, 2.6], lookAt: [9.1, 2.5, 6.8], panel: 'belts', light: [9.1, 3.6, 6.3] },
-  { name: 'RECORD BOOK', description: 'Company bests, worsts, and season awards', position: [10.1, 3.2, 3.7], lookAt: [6.55, 3.2, 3.7], panel: 'recordbook', light: [7.5, 4, 3.7] },
+  { name: 'RECORD BOOK', description: 'Classic matches, record holders, and the company yearbook', position: [10.1, 3.2, 3.7], lookAt: [6.55, 3.2, 3.7], panel: 'recordbook', light: [7.5, 4, 3.7] },
 ];
 
 function activeGalleryExhibits() {
@@ -2831,7 +2830,7 @@ function resolvePanelContent(kind) {
       };
     },
     arcadeCabinet: () => ({ title: `${getCompanyIdentity().acronym} Arcade`, kicker: 'PRIVATE FLOOR / HIGH SCORE', body: `<div class="terminal-grid"><article><small>CABINET ONLINE</small><b>${getCompanyIdentity().acronym} ARCADE</b><p>A dedicated Lounge machine for future arcade games, high scores, and visiting-talent challenges.</p></article></div>` }),
-    archive: () => ({ title: 'The Archive', kicker: 'CLASSIC MATCHES / EVENTS / HALL OF FAME', body: `${archiveHtml()}<button class="return-gallery" data-back="close">← RETURN</button>` }),
+    archive: () => ({ title: 'The Record Book', kicker: 'COMPANY HISTORY', body: `${recordBookHtml()}<button class="return-gallery" data-back="close">← RETURN</button>` }),
     milestones: () => ({ title: 'Trophy Wall', kicker: 'COMPANY ACHIEVEMENTS', body: `${trophyCaseHtml()}<button class="return-gallery" data-back="close">← RETURN</button>` }),
     trophyDetail: () => {
       const definition = TROPHIES.find(trophy => trophy.id === selectedTrophyId);
@@ -2846,7 +2845,7 @@ function resolvePanelContent(kind) {
       };
     },
     belts: () => ({ title: 'Championship Shrine', kicker: 'CURRENT HOLDERS / REIGNS / PRESTIGE', body: bookingPanelHtml().includes('belt-detail-panel') ? titleDetailViewHtml() : championshipShrineHtml() }),
-    recordbook: () => ({ title: 'The Record Book', kicker: 'COMPANY BESTS / SEASON AWARDS', body: `${recordBookHtml()}<button class="return-gallery" data-back="close">← RETURN</button>` }),
+    recordbook: () => ({ title: 'The Record Book', kicker: 'CLASSICS / RECORD HOLDERS / YEARBOOK', body: `${recordBookHtml()}<button class="return-gallery" data-back="close">← RETURN</button>` }),
     career: () => ({ title: 'GM Legacy', kicker: 'GM RESUME', body: careerPlaqueHtml() }),
     history: () => {
       setBookingView('history');
@@ -2912,6 +2911,7 @@ function openPanel(kind) {
   panelFrame.classList.toggle('trophy-room', TROPHY_ROOM_KINDS.has(kind));
   panelFrame.classList.toggle('career-plaque-mode', kind === 'career');
   panelFrame.classList.toggle('finance-office-mode', kind === 'finances');
+  panelFrame.classList.toggle('recordbook-mode', Boolean(panelContent.querySelector('.recordbook-screen')));
   panelFrame.classList.toggle('monthly-workflow-mode', Boolean(panelContent.querySelector('.monthly-workflow')));
   panelFrame.classList.toggle('computer-screen', kind === 'computer');
   panelFrame.classList.toggle('card-book-mode', kind === 'cardBook');

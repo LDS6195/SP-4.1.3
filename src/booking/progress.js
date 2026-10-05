@@ -28,6 +28,8 @@ export function createCareerState() {
     fiveStarMatches: 0,
     topMatches: [],
     topShows: [],
+    recordBookVersion: 1,
+    classicHistoryIncomplete: false,
   };
 }
 
@@ -37,7 +39,33 @@ function pushTop(list, entry, max = 5) {
   list.length = Math.min(list.length, max);
 }
 
+function classicMatchEntry(match, show) {
+  return {
+    names: (match.sideNames ?? []).join(' vs. '), rating: match.rating, stars: match.stars,
+    show: show.showName, date: show.date, city: show.city ?? '',
+    typeName: match.typeName ?? '', stakeName: match.stakeName ?? '',
+    winnerNames: match.winnerNames ?? null, outcome: match.outcome ?? '',
+    finish: match.finish ?? '', titleOutcome: match.titleOutcome ?? null,
+  };
+}
+
 export function restoreCareerLedger(career, savedCareer, archive = [], results = [], houseShows = []) {
+  const classicMatches = new Map();
+  for (const entry of career.topMatches ?? []) classicMatches.set(`${entry.date}|${entry.show}|${entry.names}`, entry);
+  for (const show of [...archive, ...results]) {
+    for (const match of show.matches ?? []) {
+      const entry = classicMatchEntry(match, show);
+      if (!Number.isFinite(entry.rating) || !entry.names) continue;
+      const key = `${entry.date}|${entry.show}|${entry.names}`;
+      classicMatches.set(key, { ...classicMatches.get(key), ...entry });
+    }
+  }
+  career.topMatches = [...classicMatches.values()].sort((first, second) => second.rating - first.rating).slice(0, 10);
+  if (savedCareer?.recordBookVersion !== 1) {
+    const retainedShows = new Set([...archive, ...results].map(show => `${show.date}|${show.showName}`));
+    career.classicHistoryIncomplete = retainedShows.size < career.showsRun;
+  }
+  career.recordBookVersion = 1;
   if (savedCareer?.houseShowsRun == null) {
     career.houseShowsRun = houseShows.length;
     career.houseShowRevenue = houseShows.reduce((total, show) => total + (show.revenue ?? 0), 0);
@@ -106,10 +134,7 @@ export function updateCareer(state, result) {
   });
   result.matches.forEach(m => {
     addCareerMatch(career, m);
-    pushTop(career.topMatches, {
-      names: m.sideNames.join(' vs. '), rating: m.rating, stars: m.stars,
-      show: result.showName, date: result.date,
-    });
+    pushTop(career.topMatches, classicMatchEntry(m, result), 10);
   });
   return gmExperienceEarned;
 }
@@ -150,6 +175,7 @@ function updateRecords(state, result) {
       date: result.date,
       show: result.showName,
       previous: current ? current.value : null,
+      previousRecord: current ? { value: current.value, holder: current.holder, date: current.date, show: current.show } : null,
     };
     // The first entry sets the bar rather than breaking anything worth announcing.
     if (current) broken.push({ ...def, ...state.records[def.id] });
@@ -302,6 +328,24 @@ function evaluateSeason(state, result) {
     .slice(0, 4)
     .map(wrestler => ({ name: wrestler.name, showsAway: wrestler.debutShow - state.showNumber }));
 
+  const rivalries = new Map();
+  for (const match of allMatches) {
+    if (match.sideNames?.length !== 2) continue;
+    const sides = match.sideIds?.map(side => [...side].sort().join('&')) ?? [...match.sideNames];
+    const key = sides.sort().join('|');
+    const rivalry = rivalries.get(key) ?? { names: match.sideNames.join(' vs. '), matches: 0, ratingTotal: 0 };
+    rivalry.matches += 1;
+    rivalry.ratingTotal += match.rating;
+    rivalries.set(key, rivalry);
+  }
+  const rivalryOfYear = [...rivalries.values()].filter(rivalry => rivalry.matches >= 2)
+    .map(rivalry => ({ names: rivalry.names, matches: rivalry.matches, averageRating: Math.round(rivalry.ratingTotal / rivalry.matches) }))
+    .sort((first, second) => (second.averageRating + Math.min(10, second.matches * 2)) - (first.averageRating + Math.min(10, first.matches * 2)))[0] ?? null;
+  const debuts = wrestlers.filter(wrestler => wrestler.debutShow > state.showNumber - season.length && wrestler.debutShow <= state.showNumber)
+    .map(wrestler => ({ id: wrestler.id, name: wrestler.name }));
+  const retirements = (state.retirees ?? []).filter(wrestler => String(wrestler.date ?? '').startsWith(String(year)))
+    .map(wrestler => ({ name: wrestler.name, age: wrestler.age, date: wrestler.date, finalRecord: wrestler.finalRecord }));
+
   const awards = {
     season: seasonNumber,
     date: result.date,
@@ -338,6 +382,9 @@ function evaluateSeason(state, result) {
       sellouts: season.filter(show => show.fillPercent >= 97).length,
       upsets: allMatches.filter(match => match.upset).length,
       champions,
+      rivalryOfYear,
+      debuts,
+      retirements,
       promos: notablePromos,
       upcomingDebuts,
       world: worldSnapshot(year),

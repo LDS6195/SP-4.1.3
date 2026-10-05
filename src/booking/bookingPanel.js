@@ -1083,39 +1083,47 @@ export function trophyCaseHtml() {
     </div>`;
 }
 
+function recordBookDays(from, to) {
+  const start = Date.parse(`${String(from ?? '').slice(0, 10)}T12:00:00Z`);
+  const end = Date.parse(`${String(to ?? '').slice(0, 10)}T12:00:00Z`);
+  return Number.isFinite(start) && Number.isFinite(end) ? Math.max(0, Math.floor((end - start) / 86400000)) : null;
+}
+
+function recordBookClassicsHtml(state) {
+  const classics = state.career.topMatches ?? [];
+  return `<section class="recordbook-classics"><div class="recordbook-section-head"><h3>Matches worth remembering</h3><span>ALL-TIME TOP ${Math.min(10, classics.length)}</span></div>${state.career.classicHistoryIncomplete ? '<p class="recordbook-history-note">Older-save matches are reconstructed from retained history; earlier details may be unavailable.</p>' : ''}${classics.length ? classics.slice(0, 10).map((match, index) => `<details class="recordbook-classic"><summary><span class="recordbook-rank">${String(index + 1).padStart(2, '0')}</span><div><b>${financeText(match.names)}</b><small>${financeText(match.show)} · ${financeText(match.date)}${match.city ? ` · ${financeText(match.city)}` : ''}</small></div><span class="recordbook-rating"><b>${(match.rating / 20).toFixed(2)}</b><small>/ 5 STARS</small></span></summary><div class="recordbook-match-detail"><dl><div><dt>MATCH</dt><dd>${financeText(match.typeName || 'Not retained')}</dd></div><div><dt>STAKES</dt><dd>${financeText(match.stakeName || 'Not retained')}</dd></div><div><dt>RESULT</dt><dd>${match.outcome === 'draw' ? 'Draw' : financeText(match.winnerNames ? `${match.winnerNames} won` : 'Not retained')}</dd></div></dl><p>${financeText(match.finish || 'The finish description was not retained in this older save.')}</p>${match.titleOutcome ? `<p class="recordbook-title-change">${financeText(match.titleOutcome.type === 'change' || match.titleOutcome.type === 'crowned' ? 'CHAMPIONSHIP CHANGED HANDS' : 'CHAMPIONSHIP RETAINED')}</p>` : ''}</div></details>`).join('') : '<p class="recordbook-empty">Your first show will start this collection.</p>'}</section>`;
+}
+
+function recordBookHoldersHtml(state) {
+  return `<section class="recordbook-holders"><div class="recordbook-section-head"><h3>The company benchmarks</h3><span>BESTS, FIRSTS & LOW POINTS</span></div><div class="recordbook-record-grid">${RECORD_DEFS.map(def => {
+    const record = state.records[def.id];
+    const standing = record ? recordBookDays(record.date, state.date) : null;
+    const previous = record?.previousRecord;
+    const previousDays = previous ? recordBookDays(previous.date, record.date) : null;
+    return `<article class="recordbook-record ${record ? '' : 'empty'}"><small>${def.label}</small><strong>${record ? financeText(def.format(record.value)) : '—'}</strong><b>${financeText(record?.holder || 'No record yet')}</b><span>${record ? `${financeText(record.date)}${standing !== null ? ` · STANDING ${standing} DAY${standing === 1 ? '' : 'S'}` : ''}` : 'Awaiting your first show'}</span><div class="recordbook-previous">${previous ? `<small>PREVIOUS HOLDER</small><b>${financeText(previous.holder)}</b><span>${financeText(def.format(previous.value))}${previousDays !== null ? ` · STOOD ${previousDays} DAY${previousDays === 1 ? '' : 'S'}` : ''}</span>` : record?.previous != null ? `<small>PREVIOUS BENCHMARK</small><span>${financeText(def.format(record.previous))} · Holder details not retained</span>` : '<small>FIRST BENCHMARK</small>'}</div></article>`;
+  }).join('')}</div></section>`;
+}
+
+function recordBookYearbookHtml(state) {
+  const retirees = booking.getRetirees();
+  const list = (entries, fallback) => entries.length ? `<ul>${entries.map(entry => `<li>${entry}</li>`).join('')}</ul>` : `<p class="recordbook-muted">${fallback}</p>`;
+  const years = (state.awards ?? []).map(award => {
+    const recap = award.recap ?? {};
+    const year = recap.year ?? String(award.date ?? '').slice(0, 4);
+    const retirements = recap.retirements ?? retirees.filter(wrestler => String(wrestler.date ?? '').startsWith(String(year)));
+    const rivalry = recap.rivalryOfYear;
+    return `<article class="recordbook-year"><header><div><small>SEASON ${award.season}</small><h3>${financeText(year || 'Yearbook')}</h3></div><span>${award.averageRating}/100 AVG PPV · ${money(award.totalRevenue)} REVENUE · ${signed(award.totalProfit)} NET</span></header><div class="recordbook-year-grid"><section><h4>Annual honors</h4>${list([award.wrestlerOfSeason ? `<b>WRESTLER</b> ${financeText(award.wrestlerOfSeason.name)}${award.wrestlerOfSeason.external ? ` · ${financeText(award.wrestlerOfSeason.origin)}` : ''}` : '', award.matchOfSeason ? `<b>MATCH</b> ${financeText(award.matchOfSeason.names)} · ${financeText(award.matchOfSeason.stars)}` : '', award.showOfSeason ? `<b>SHOW</b> ${financeText(award.showOfSeason.name)} · ${award.showOfSeason.rating}/100` : ''].filter(Boolean), 'No award details retained.')}</section><section><h4>The defining rivalry</h4>${rivalry ? `<b>${financeText(rivalry.names)}</b><p>${rivalry.matches} meetings · ${rivalry.averageRating}/100 average</p>` : `<p class="recordbook-muted">${Object.hasOwn(recap, 'rivalryOfYear') ? 'No recurring matchup defined this year.' : 'Rivalry details were not retained in this older save.'}</p>`}</section><section><h4>Year-end champions</h4>${list((recap.champions ?? []).map(champion => `<b>${financeText(champion.title)}</b> ${financeText(champion.holders.join(' & '))}`), 'No champion snapshot retained.')}</section><section><h4>World debuts</h4>${list((recap.debuts ?? []).map(wrestler => financeText(wrestler.name)), Object.hasOwn(recap, 'debuts') ? 'No new arrivals this year.' : 'Debut details were not retained in this older save.')}</section><section><h4>Retirements</h4>${list(retirements.map(wrestler => `${financeText(wrestler.name)} · AGE ${wrestler.age} · ${wrestler.finalRecord?.w ?? 0}-${wrestler.finalRecord?.l ?? 0}`), 'No dated retirements this year.')}</section><section><h4>The year in numbers</h4><p>${recap.totalAttendance?.toLocaleString() ?? '—'} fans · ${recap.totalMatches ?? '—'} matches</p><p>${recap.sellouts ?? '—'} sellouts · ${recap.upsets ?? '—'} upsets</p></section></div></article>`;
+  });
+  const undated = retirees.filter(wrestler => !wrestler.date);
+  return `<section class="recordbook-yearbook"><div class="recordbook-section-head"><h3>A promotion with a past</h3><span>YEAR-END CHAPTERS</span></div>${years.length ? years.join('') : '<p class="recordbook-empty">Your first year-end awards will open the Yearbook.</p>'}${undated.length ? `<section class="recordbook-undated"><h4>Earlier retirements · date not retained</h4>${list(undated.map(wrestler => `${financeText(wrestler.name)} · AGE ${wrestler.age} · ${wrestler.finalRecord?.w ?? 0}-${wrestler.finalRecord?.l ?? 0}`), '')}</section>` : ''}</section>`;
+}
+
 export function recordBookHtml() {
   const state = booking.getState();
-  const awards = state.awards;
-  const retirees = booking.getRetirees();
-
-  return `<div class="record-book">
-      ${RECORD_DEFS.map(def => {
-        const record = state.records[def.id];
-        return `<article class="${record ? '' : 'empty'}">
-          <small>${def.label}</small>
-          <b>${record ? def.format(record.value) : '—'}</b>
-          <span>${record ? `${record.holder} · ${record.date}` : 'Not yet set'}</span>
-        </article>`;
-      }).join('')}
-    </div>
-    ${awards.length ? `<small class="bk-label spaced">SEASON AWARDS</small>
-    <div class="bk-stack">
-      ${awards.map(a => `<article class="bk-history">
-        <header><b>${a.recap?.year ?? `Season ${a.season}`}</b><span>${a.date} · avg rating ${a.averageRating} · ${signed(a.totalProfit)} across ${compactMoney(a.totalRevenue)} revenue</span></header>
-        <ul>
-          ${a.wrestlerOfSeason ? `<li><span>WRESTLER OF THE YEAR</span>${a.wrestlerOfSeason.name}${a.wrestlerOfSeason.external ? ` <em>(${a.wrestlerOfSeason.origin})</em>` : ''}</li>` : ''}
-          ${a.matchOfSeason ? `<li><span>MATCH</span>${a.matchOfSeason.names} <em>(${a.matchOfSeason.stars})</em></li>` : ''}
-          ${a.showOfSeason ? `<li><span>SHOW</span>${a.showOfSeason.name} <em>(${a.showOfSeason.rating})</em></li>` : ''}
-        </ul>
-      </article>`).join('')}
-    </div>` : ''}
-    ${retirees.length ? `<small class="bk-label spaced">HALL OF FAME · ${retirees.length} RETIRED</small>
-    <div class="bk-stack">
-      ${retirees.map(r => `<article class="bk-history">
-        <header><b>${r.name}</b><span>Retired at ${r.age} · ${r.date ?? ''}</span></header>
-        <p>Final record ${r.finalRecord.w}-${r.finalRecord.l}${r.reason ? ` · ${r.reason}` : ''}</p>
-      </article>`).join('')}
-    </div>` : ''}`;
+  const tabs = [['classics', 'CLASSIC MATCHES'], ['holders', 'RECORD HOLDERS'], ['yearbook', 'YEARBOOK']];
+  const selected = tabs.some(([id]) => id === view.recordBookTab) ? view.recordBookTab : 'classics';
+  const body = selected === 'holders' ? recordBookHoldersHtml(state) : selected === 'yearbook' ? recordBookYearbookHtml(state) : recordBookClassicsHtml(state);
+  return `<div class="recordbook-screen"><header class="recordbook-masthead"><small>${financeText(booking.getCompanyIdentity().name)} / COMPANY HISTORY</small><h2>The Record Book</h2><span>${financeText(state.date)}</span></header><div class="recordbook-tabs" role="tablist" aria-label="Record Book sections">${tabs.map(([id, label]) => `<button type="button" role="tab" id="recordbook-tab-${id}" aria-controls="recordbook-page" aria-selected="${selected === id}" class="${selected === id ? 'selected' : ''}" data-bk="recordbook-tab" data-value="${id}">${label}</button>`).join('')}</div><div class="recordbook-page" id="recordbook-page" role="tabpanel" aria-labelledby="recordbook-tab-${selected}">${body}</div></div>`;
 }
 
 // Permanent exhibits: the matches and nights worth remembering.
@@ -2240,6 +2248,9 @@ export function handleBookingEvent(event, { toast = () => {}, onShowRun = () => 
   const value = target.dataset.value;
 
   switch (action) {
+    case 'recordbook-tab':
+      if (['classics', 'holders', 'yearbook'].includes(value)) view.recordBookTab = value;
+      return true;
     case 'fold':
       if (open.has(value)) open.delete(value);
       else open.add(value);
