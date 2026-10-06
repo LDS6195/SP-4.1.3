@@ -31,6 +31,7 @@ function drawTierSlots(shape, poolByTier, rng, taken) {
 export function createCardState() {
   return {
     chips: 0,
+    collectedWrestlerIds: [],
     // { [matchTypeId]: count }
     gimmicks: {},
     // { [storyTemplateId]: count }

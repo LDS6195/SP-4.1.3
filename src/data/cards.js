@@ -216,6 +216,12 @@ export const CRIB_PACKS = {
   variety: { id: 'variety', name: 'Variety Pack', blurb: '2 match cards and 2 Promo cards.', cost: 130000, gimmicks: 2, promos: 2, wrestlers: 0, color: '#c59b31' },
 };
 
+export function packCostForGMLevel(baseCost, gmLevel = 1) {
+  const level = Math.max(1, Math.min(10, Math.floor(Number(gmLevel) || 1)));
+  const multiplier = 1 + (level - 1) * .05;
+  return Math.round(baseCost * multiplier / 1000) * 1000;
+}
+
 export const PACK_TUTORIAL_REWARDS = [
   { id: 'free-agent-introduction', afterShow: 3, kind: 'free-agent', wrestlerTiers: ['contender', 'star', 'legend'], wrestlerTierWeights: { legend: 1, star: 1, contender: 1, jobber: 0 } },
 ];

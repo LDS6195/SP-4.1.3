@@ -304,9 +304,7 @@ function refreshPpvLogo() {
 function refreshHud() {
   const state = getState();
   const date = new Date(`${state.date}T12:00:00`);
-  const capital = state.bankroll >= 1000000
-    ? `$${(state.bankroll / 1000000).toFixed(1)}M`
-    : `$${Math.round(state.bankroll / 1000)}K`;
+  const capital = state.bankroll.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
   document.querySelector('#hud-capital').textContent = capital;
   document.querySelector('#hud-date').textContent = date.toLocaleDateString('en-US', {
     weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
@@ -1662,7 +1660,7 @@ function makeChampionshipDisplay(x, y, z, beltUrl, label, { width, height }) {
 }
 
 const TROPHY_SHELF_ROWS = 5;
-const TROPHY_SHELF_COLS = 7;
+const TROPHY_SHELF_COLS = Math.max(7, Math.ceil(TROPHIES.length / TROPHY_SHELF_ROWS));
 const trophyDisplays = [];
 const trophyBronze = new THREE.MeshStandardMaterial({ color: 0xa96739, roughness: .36, metalness: .72 });
 const trophySilver = new THREE.MeshStandardMaterial({ color: 0xbec5ca, roughness: .24, metalness: .9 });
@@ -1858,7 +1856,7 @@ function recordPlaqueTexture() {
   ctx.font = '700 27px Georgia, serif';
   ctx.fillText('RECORD BOOK', width / 2, 72);
   ctx.font = '600 14px Georgia, serif';
-  ctx.fillText(`${getCompanyIdentity().name.toUpperCase()} \u00b7 COMPANY BESTS`, width / 2, 100);
+  ctx.fillText(`${getCompanyIdentity().acronym.toUpperCase()} \u00b7 COMPANY BESTS`, width / 2, 100);
   [[56, 44], [width - 56, 44], [56, 112], [width - 56, 112]].forEach(([sx, sy]) => {
     ctx.beginPath();
     ctx.arc(sx, sy, 4.5, 0, Math.PI * 2);
@@ -2894,6 +2892,11 @@ function resolvePanelContent(kind) {
 }
 
 function openPanel(kind) {
+  if (kind !== 'computer' && hasPendingThirdShowEmail()) {
+    openThirdShowEmail();
+    return;
+  }
+  refreshHud();
   currentPanelKind = kind;
   if (kind === 'computer') { selectedWrestlerId = null; profileReturn = null; }
   const content = resolvePanelContent(kind);
@@ -2929,6 +2932,19 @@ function openPanel(kind) {
   updateAltMenuActiveItem(kind);
 }
 
+function hasPendingThirdShowEmail() {
+  return getState().career.showsRun >= 3
+    && getInbox().some(email => email.id === 'free-agent-introduction' && email.unread);
+}
+
+function openThirdShowEmail() {
+  altMenuOpen = false;
+  panel.classList.remove('alt-menu-active', 'alt-menu-collapsed');
+  terminalTab = 'email';
+  selectedEmailId = 'free-agent-introduction';
+  openPanel('computer');
+}
+
 function closePanel() {
   // While the alt-menu sidebar is up, "closing" a screen just means the sidebar
   // stays put — actual exit only happens through closeAltMenu() (Escape / The Crib).
@@ -2939,6 +2955,10 @@ function closePanel() {
     terminalTab = 'email';
     selectedEmailId = 'welcome';
     openPanel('computer');
+    return;
+  }
+  if (hasPendingThirdShowEmail()) {
+    openThirdShowEmail();
     return;
   }
   const returningToBookingBoard = currentPanelKind === 'calendar' && getBookingView() === 'card';
@@ -2996,6 +3016,10 @@ function openAltMenu() {
 }
 
 function closeAltMenu() {
+  if (hasPendingThirdShowEmail()) {
+    openThirdShowEmail();
+    return;
+  }
   altMenuOpen = false;
   panelOpen = false;
   currentPanelKind = null;
@@ -3254,6 +3278,8 @@ document.querySelector('#enter-button').addEventListener('click', () => {
     terminalTab = 'email';
     selectedEmailId = 'welcome';
     openPanel('computer');
+  } else if (hasPendingThirdShowEmail()) {
+    openThirdShowEmail();
   }
 });
 document.querySelector('#new-game-button').addEventListener('click', () => {
@@ -3424,6 +3450,7 @@ panelContent.addEventListener('click', event => {
     return;
   }
   if (event.target.closest('[data-visit-vending]')) {
+    if (selectedEmailId === 'free-agent-introduction') markEmailRead(selectedEmailId);
     galleryMode = false;
     trophyGalleryMode = false;
     vhsMode = false;
@@ -3543,6 +3570,7 @@ panelContent.addEventListener('click', event => {
     }
     purchasedPackFlipped = [];
     const result = buyPack(packPurchase.dataset.packBuy);
+    refreshHud();
     showToast(result.ok ? `${result.pack.name}: ${result.cards.map(card => card.name).join(', ')}` : result.message);
     if (result.ok) openPanel('packVending');
     return;
@@ -3604,11 +3632,8 @@ panelContent.addEventListener('click', event => {
             showToast(`${result.tragedy.name} has passed away. The next show will be a tribute.`);
             return;
           }
-          if (result.showNumber === 3) {
-            terminalTab = 'email';
-            selectedEmailId = 'free-agent-introduction';
-            markEmailRead(selectedEmailId);
-            openPanel('computer');
+          if (hasPendingThirdShowEmail()) {
+            openThirdShowEmail();
             showToast('A free Free Agent Pack is waiting in the vending machine.');
             return;
           }

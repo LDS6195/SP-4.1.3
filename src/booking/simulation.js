@@ -6,7 +6,7 @@
 import { getDraftTier, getWrestlerById } from '../data/wrestlers.js';
 import { getMatchType, getStake, getMatchLength } from '../data/matchTypes.js';
 import { getChampionship, titleMatchCompatible } from '../data/championships.js';
-import { eventBroadcastGuarantee, FINANCE_VARIANCE } from '../data/finances.js';
+import { eventBroadcastGuarantee, televisionViewers, FINANCE_VARIANCE } from '../data/finances.js';
 import { matchParticipantIds, ratingLabel, gradeFor } from './bookingEngine.js';
 
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
@@ -555,9 +555,7 @@ export function simulateShow(show, projection, context = {}) {
   );
 
   const tvViewers = Math.round(
-    1200000 * (projection.venue?.tvReach ?? 0.5) *
-    (0.55 + rating / 110) *
-    (1 + projection.stage.tvBonus) *
+    televisionViewers(projection.venue, rating, projection.tvAudience ?? 0, projection.cardBuzz / Math.max(show.matches.length, 1)) *
     rand(0.92, 1.1),
   );
   const tvRating = (tvViewers / 960000).toFixed(1);

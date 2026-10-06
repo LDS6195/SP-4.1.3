@@ -747,10 +747,20 @@ export function resolveTemplate(instance) {
   return getStorylineTemplate(instance?.templateId);
 }
 
-// Pick one variation from the Promo card's authored copy and fill in the wrestlers.
+export function promoCharismaChance(charisma = 50) {
+  const skill = Number.isFinite(charisma) ? charisma : 50;
+  return Math.max(0, Math.min(.5, (skill - 50) / 100));
+}
+
+export function rollPromoReward(min, max, charisma = 50, rng = Math.random) {
+  const roll = () => min + Math.floor(rng() * (max - min + 1));
+  const base = roll();
+  const extraRollChance = promoCharismaChance(charisma);
+  return extraRollChance > 0 && rng() < extraRollChance ? Math.max(base, roll()) : base;
+}
+
 export function previewText(template, a, b, context = {}) {
-  const lines = template?.beats?.length ? template.beats : [template?.tagline ?? ''];
-  const line = lines[Math.floor(Math.random() * lines.length)];
+  const line = template?.description ?? template?.tagline ?? template?.beats?.[0] ?? '';
   return line.replace(/{a}/g, a?.name ?? 'They').replace(/{b}/g, b?.name ?? 'their opponent').replace(/{company}/g, context.acronym ?? 'the new federation');
 }
 

@@ -7,6 +7,8 @@
 // ---------------------------------------------------------------------------
 // Trophies — checked after every show. `test` receives (result, state).
 // ---------------------------------------------------------------------------
+import { wrestlers, getDraftTier } from './wrestlers.js';
+
 export const TROPHIES = [
   {
     id: 'first-blood',
@@ -252,6 +254,17 @@ export const TROPHIES = [
     tier: 'gold',
     flavor: 'Ran flagship events in ten different markets.',
     test: (r, s) => new Set(s.history.map(show => show.venueId)).size >= 10,
+  },
+  {
+    id: 'gotta-catch-em-all',
+    name: "Gotta Catch 'Em All",
+    tier: 'gold',
+    flavor: 'Acquired every collectible non-custom wrestler card across your career.',
+    test: (r, s) => {
+      const collected = new Set(s.cards?.collectedWrestlerIds ?? s.draft?.signedIds ?? []);
+      return wrestlers.filter(wrestler => !wrestler.custom && getDraftTier(wrestler) !== 'celebrity')
+        .every(wrestler => collected.has(wrestler.id));
+    },
   },
 ];
 

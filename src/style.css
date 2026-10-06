@@ -729,7 +729,9 @@ kbd { padding: 2px 4px; border: 1px solid rgba(211,168,78,.65); color: var(--gol
 }
   .panel-frame.trophy-room.career-plaque-mode { width: min(1500px, 98vw); max-height: 94vh; border: 1px solid #a18a51; background: #090d10; box-shadow: 0 28px 100px #000b; }
   .panel-frame.trophy-room.career-plaque-mode::after { box-shadow: none; }
-  .panel-frame.trophy-room.career-plaque-mode > header,
+  .panel-frame.trophy-room.career-plaque-mode > header { position: absolute; top: 10px; right: 10px; z-index: 5; display: flex; padding: 0; border: 0; background: transparent; }
+  .panel-frame.trophy-room.career-plaque-mode > header > div { display: none; }
+  .panel-frame.trophy-room.career-plaque-mode > header #close-panel { display: grid; place-items: center; width: 38px; height: 38px; border-color: rgba(211,168,78,.75); color: #f2e8ce; background: rgba(9,13,16,.88); font-size: 25px; }
   .panel-frame.trophy-room.career-plaque-mode > footer { display: none; }
   .panel-frame.trophy-room.career-plaque-mode #panel-content { padding: 0; background: #090d10; }
 .panel-frame.trophy-room::after {
@@ -796,7 +798,7 @@ kbd { padding: 2px 4px; border: 1px solid rgba(211,168,78,.65); color: var(--gol
 .panel-frame.booking-board-home #panel-content { padding-top: 14px; }
 /* The results poster carries its own event header; keep only the close button. */
 .panel-frame.results-poster { position: relative; }
-.panel-frame.results-poster > header { position: absolute; top: 8px; right: 10px; z-index: 5; padding: 0; border: 0; background: none; }
+.panel-frame.results-poster > header { position: absolute; top: 14px; right: 26px; z-index: 5; padding: 0; border: 0; background: none; }
 .panel-frame.results-poster > header > div { display: none; }
 .panel-frame.results-poster #panel-content { padding-top: 14px; }
 .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 7px; }.day { min-height: 122px; padding: 13px; border: 1px solid #56504c; color: #d8d1c5; background: #29292c; text-align: left; cursor: pointer; }.day.active { border-color: var(--gold); background: #4a2024; }.day.has-activity { border-color: #8d5e46 !important; background: #302526 !important; }.day small, .day b { display: block; }.day small { color: var(--gold); font: 500 10px 'DM Mono', monospace; }.day b { margin-top: 33px; font: 600 19px/1 'Barlow Condensed', sans-serif; letter-spacing: .04em; text-transform: uppercase; }.day-activity { display: -webkit-box; overflow: hidden; color: #e3c58c; font: 500 10px/1.25 'DM Mono', monospace; text-overflow: ellipsis; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }.activity-list { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 18px; }.activity-list button { display: flex; gap: 12px; padding: 12px; border: 1px solid #514c48; color: #e5ded0; background: #202023; text-align: left; cursor: pointer; }.activity-list button:hover, .activity-list button.selected { border-color: var(--gold); background: #33282a; }.activity-list span { color: var(--gold); font: 500 10px 'DM Mono', monospace; }

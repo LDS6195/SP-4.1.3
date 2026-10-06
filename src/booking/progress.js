@@ -7,6 +7,7 @@ import { CHAMPIONSHIPS, getChampionship } from '../data/championships.js';
 import { worldSnapshot } from '../data/worldNews.js';
 import { INDEPENDENT_CIRCUIT } from '../data/rivalScene.js';
 import { gmExperienceForShow, gmLevelForExperience } from '../data/venues.js';
+import { growTelevisionAudience } from '../data/finances.js';
 
 // Career totals live outside the pruned history/results arrays so lifetime stats
 // (the trophy room plaque) stay accurate no matter how many shows have run.
@@ -21,6 +22,7 @@ export function createCareerState() {
     totalMerch: 0,
     totalAttendance: 0,
     totalTVViewers: 0,
+    tvAudience: 0,
     wrestlerStars: {},
     totalMatches: 0,
     totalStars: 0,
@@ -76,6 +78,12 @@ export function restoreCareerLedger(career, savedCareer, archive = [], results =
       if (match.rating >= 100) career.fiveStarMatches += 1;
     }));
   }
+  if (savedCareer?.tvAudience == null) {
+    const audienceShows = new Map([...archive, ...results].map(show => [`${show.date}|${show.showName}`, show]));
+    career.tvAudience = [...audienceShows.values()].sort((first, second) => String(first.date).localeCompare(String(second.date)))
+      .reduce((audience, show) => growTelevisionAudience(audience, show.rating, (show.matches ?? []).reduce((sum, match) => sum + (match.buzz ?? 0), 0) / Math.max(show.matches?.length ?? 0, 1)), 0);
+    career.tvAudienceHistoryIncomplete = audienceShows.size < career.showsRun;
+  }
   if (savedCareer?.wrestlerStars != null && savedCareer?.totalTVViewers != null) return;
   const shows = new Map();
   archive.forEach(show => shows.set(`${show.date}|${show.showName}`, show));
@@ -126,6 +134,11 @@ export function updateCareer(state, result) {
   career.totalMerch += result.revenue.merch;
   career.totalAttendance += result.attendance;
   career.totalTVViewers = (career.totalTVViewers ?? 0) + (result.tvViewers ?? 0);
+  const averageBuzz = result.matches.reduce((sum, match) => sum + (match.buzz ?? 0), 0) / Math.max(result.matches.length, 1);
+  const previousAudience = career.tvAudience ?? 0;
+  career.tvAudience = growTelevisionAudience(previousAudience, result.rating, averageBuzz);
+  result.tvAudience = career.tvAudience;
+  result.tvAudienceChange = career.tvAudience - previousAudience;
   career.wrestlerStars ??= {};
   career.totalRatingSum += result.rating;
   pushTop(career.topShows, {

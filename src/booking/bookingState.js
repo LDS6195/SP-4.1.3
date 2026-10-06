@@ -17,6 +17,7 @@ import {
   FOUNDING_GIMMICK_CARDS, FOUNDING_GIMMICK_PACK, FOUNDING_GIMMICK_WEIGHTS, FOUNDING_PROMO_PACK,
   ANNUAL_PROMO_PACK, TITLE_CARDS, BASE_PULL_WEIGHT, PACK_TUTORIAL_REWARDS,
   chipsForShowRating, isBasicMatchType, gimmickRarity,
+  packCostForGMLevel,
 } from '../data/cards.js';
 import {
   createCardState, rollFoundingPack, redrawFoundingCard, buildAnnualBoard, boardOdds,
@@ -30,6 +31,7 @@ import { createLeadUpState, refillLeadUp, applyActivity, skipWeek, jumpToEvent, 
 import { runAgingPass } from './aging.js';
 import { applyGoodwillDrift, clampPrice, createFinanceState, ticketPriceRatio } from '../data/finances.js';
 import { getStagePackage } from '../data/production.js';
+import { TROPHIES } from '../data/achievements.js';
 import { generatePromo } from './promoEngine.js';
 import { PROMO_PARTNER_FEE } from '../data/promos.js';
 import { pickTragedyCause } from '../data/tragedy.js';
@@ -38,10 +40,10 @@ import { generateArrivalPromo } from './arrivalEngine.js';
 import { NWO_MEMBER_IDS, NWO_ANNOUNCEMENTS } from '../data/nwo.js';
 import {
   generateIncidentText, resolveTemplate, promoCardRarity, PROMO_CARD_RARITIES, PROMO_CARD_RARITY,
-  eligibleTemplates, previewText, getStorylineTemplate,
+  eligibleTemplates, previewText, getStorylineTemplate, rollPromoReward,
 } from '../data/storylines.js';
 import { RANDOM_EVENT_CARDS } from '../data/randomEvents.js';
-import { createMarketHype, normalizeMarketHype, updateMarketHype } from './marketHype.js';
+import { createMarketHype, normalizeMarketHype, updateMarketHype, recommendTourVenue, MARKET_LOCATIONS } from './marketHype.js';
 
 const STORAGE_KEY = 'rival-promotion-booking-v8';
 const MAX_SAVED_TEAMS = 20;
@@ -93,7 +95,7 @@ function createMatch() {
   };
 }
 
-function createShow(index = 1, eventBranding = {}) {
+function createShow(index = 1, eventBranding = {}, venueId = venues.find(venue => venue.city === 'San Antonio, TX')?.id ?? venues[0].id) {
   const event = calendarForShowNumber(index);
   const matches = Array.from({ length: MIN_MATCHES }, createMatch);
   return {
@@ -102,13 +104,22 @@ function createShow(index = 1, eventBranding = {}) {
     eventId: event.id,
     theme: event.theme,
     date: ppvDateForShowNumber(index),
-    venueId: venues[0].id,
+    venueId,
     promoId: 'word-of-mouth',
     stageId: 'bare',
     ticketId: 'standard',
     matches,
     tribute: null,
   };
+}
+
+function nextTourVenueId() {
+  const recentVenueIds = state.history.slice(0, 3).map(show => show.venueId);
+  const previousVenue = venues.find(venue => venue.id === recentVenueIds[0]);
+  const homeRegion = MARKET_LOCATIONS[state.company.homeCity]?.region;
+  const candidates = venues.filter(venue => venueUnlocked(venue, getGMLevel()));
+  return recommendTourVenue(candidates, state.marketHype, recentVenueIds, previousVenue?.region ?? homeRegion, state.company.homeCity)?.id
+    ?? venues[0].id;
 }
 
 function createDraftState() {
@@ -572,6 +583,18 @@ function load() {
       });
       loaded.jobberStatsVersion = 2;
     }
+    const acquiredCards = [
+      ...(loaded.cards.collectedWrestlerIds ?? []),
+      ...(loaded.draft.signedIds ?? []),
+      ...Object.keys(loaded.signedShows ?? {}),
+      ...(loaded.retirees ?? []).map(wrestler => wrestler.id),
+      ...(loaded.cards.intakeQueue ?? []),
+      ...(loaded.cards.history ?? []).flatMap(entry => entry.drawn ?? []),
+      ...(loaded.cards.founding.complete ? loaded.cards.founding.cards.map(card => card.id) : []),
+      ...(loaded.cards.pendingPack?.cards ?? []).filter(card => card.kind === 'wrestler').map(card => card.id),
+    ];
+    loaded.cards.collectedWrestlerIds = [];
+    acquiredCards.forEach(id => recordWrestlerCard(id, loaded));
     return loaded;
   } catch {
     return defaultState();
@@ -939,8 +962,9 @@ export function getSignedRoster() {
 }
 
 export function getPowerRankings() {
+  const heavyweightChampions = new Set(state.titles.world?.holders ?? []);
   const ranked = getSignedRoster().map(w => {
-    const champion = isChampion(w.id).length > 0;
+    const champion = heavyweightChampions.has(w.id);
     const score = w.popularity + w.momentum * 4 + w.record.w * 1.5 - w.record.l * .5 + (champion ? 12 : 0);
     return { w, champion, score };
   }).sort((first, second) => {
@@ -1034,6 +1058,7 @@ export function confirmFoundingRoster() {
   if (founding.complete) return { ok: false, message: 'Already locked in.' };
   if (founding.revealed.length < founding.cards.length) return { ok: false, message: 'Turn every card over first.' };
   founding.cards.forEach(card => {
+    recordWrestlerCard(card.id);
     if (state.draft.signedIds.includes(card.id)) return;
     state.draft.signedIds.push(card.id);
     state.signedShows[card.id] = state.showNumber;
@@ -1141,6 +1166,7 @@ export function getProjection(venueId = state.show.venueId) {
     marketHype: state.marketHype,
     teams: state.teams,
     leadUpLog: state.leadUp.log,
+    tvAudience: state.career.tvAudience ?? 0,
   });
 }
 
@@ -1777,7 +1803,7 @@ export function getMatchPromoCard(matchId) {
   return {
     id: match.promoCardId,
     name: match.promoCardCustom?.title ?? template.name,
-    description: match.promoCardCustom?.description ?? template.description.replace(/{company}/g, state.company.acronym),
+    description: match.promoCardCustom?.description ?? previewText(template, getWrestlerById(match.promoCardWrestlerId), getWrestlerById(match.promoCardPartnerId ?? matchParticipantIds(match).find(id => id !== match.promoCardWrestlerId)), state.company),
     rarity: promoCardRarity(match.promoCardId),
     wrestlerId: match.promoCardWrestlerId,
     played: Boolean(match.promoCardPlayed),
@@ -1872,9 +1898,9 @@ export function runMonthlyPromoCardPhase(matchId, wrestlerId, { skip = false } =
     return { ok: false, message: 'That Promo card is no longer in stock.' };
   }
   const effect = {
-    matchBuzz: rollBetween(...rarity.matchBuzz),
-    momentum: rollBetween(...rarity.momentum),
-    popularity: rollBetween(...rarity.popularity),
+    matchBuzz: rollPromoReward(...rarity.matchBuzz, wrestler.stats.charisma),
+    momentum: rollPromoReward(...rarity.momentum, wrestler.stats.charisma),
+    popularity: rollPromoReward(...rarity.popularity, wrestler.stats.charisma),
       ...(match.promoCardId === 'number-one-spot' ? { contenderOnWin: true } : {}),
       ...(match.promoCardId === 'friendship-clause' ? { formsTagTeam: true } : {}),
   };
@@ -2173,41 +2199,48 @@ function applyRandomEventEffect(card, { a, b, angle }, date) {
   const shiftStats = ([count, min, max], direction) => {
     ['strength', 'agility', 'technique', 'toughness', 'charisma'].sort(() => Math.random() - 0.5).slice(0, count).forEach(stat => {
       const amount = rollBetween(min, max) * direction;
+      const before = a.stats[stat];
       a.stats[stat] = Math.max(1, Math.min(99, a.stats[stat] + amount));
-      effects.push(signedLabel(STAT_LABELS[stat], amount));
+      effects.push(signedLabel(`${a.name} ${STAT_LABELS[stat]}`, a.stats[stat] - before));
     });
   };
   if (effect.statDrop) shiftStats(effect.statDrop, -1);
   if (effect.statGain) shiftStats(effect.statGain, 1);
   if (effect.stamina) {
     const amount = rangeRoll(effect.stamina);
-    state.stamina[a.id] = Math.max(0, Math.min(100, staminaFor(a.id) + amount));
-    effects.push(signedLabel('Stamina', amount));
+    const before = staminaFor(a.id);
+    state.stamina[a.id] = Math.max(0, Math.min(100, before + amount));
+    effects.push(signedLabel(`${a.name} stamina`, state.stamina[a.id] - before));
   }
   if (effect.staminaB && b) {
     const amount = rangeRoll(effect.staminaB);
-    state.stamina[b.id] = Math.max(0, Math.min(100, staminaFor(b.id) + amount));
-    effects.push(signedLabel(`${b.name} stamina`, amount));
+    const before = staminaFor(b.id);
+    state.stamina[b.id] = Math.max(0, Math.min(100, before + amount));
+    effects.push(signedLabel(`${b.name} stamina`, state.stamina[b.id] - before));
   }
   if (effect.morale) {
     const amount = rangeRoll(effect.morale);
+    const before = moraleFor(a.id);
     adjustMorale(a.id, amount);
-    effects.push(signedLabel(`${a.name} satisfaction`, amount));
+    effects.push(signedLabel(`${a.name} satisfaction`, moraleFor(a.id) - before));
   }
   if (effect.moraleB && b) {
     const amount = rangeRoll(effect.moraleB);
+    const before = moraleFor(b.id);
     adjustMorale(b.id, amount);
-    effects.push(signedLabel(`${b.name} satisfaction`, amount));
+    effects.push(signedLabel(`${b.name} satisfaction`, moraleFor(b.id) - before));
   }
   if (effect.pop) {
     const amount = rangeRoll(effect.pop);
+    const before = a.popularity;
     a.popularity = Math.max(1, Math.min(100, a.popularity + amount));
-    effects.push(signedLabel('Popularity', amount));
+    effects.push(signedLabel(`${a.name} popularity`, a.popularity - before));
   }
   if (effect.popB && b) {
     const amount = rangeRoll(effect.popB);
+    const before = b.popularity;
     b.popularity = Math.max(1, Math.min(100, b.popularity + amount));
-    effects.push(signedLabel(`${b.name} popularity`, amount));
+    effects.push(signedLabel(`${b.name} popularity`, b.popularity - before));
   }
   if (effect.momentum) {
     const before = a.momentum ?? 0;
@@ -2251,7 +2284,7 @@ function applyRandomEventEffect(card, { a, b, angle }, date) {
       effects: {},
     });
     state.promoHistory = state.promoHistory.slice(0, 500);
-    effects.push(`Profile Promo: ${effect.story.title}`);
+    effects.push(`Profile story recorded: ${effect.story.title} — ${a.name} & ${b.name}`);
   }
   snapshotWrestler(a);
   if (b) snapshotWrestler(b);
@@ -2288,6 +2321,9 @@ export function resolveRandomEvent() {
       title: card.title,
       body: card.text.replaceAll('{a}', cast.a.name).replaceAll('{b}', cast.b?.name ?? ''),
       effects,
+      impactSummary: card.effect?.story && !Object.keys(card.effect).some(key => key !== 'story')
+        ? 'Profile history only. No active rivalry was started, and match hype, momentum, and popularity are unchanged.'
+        : effects.length ? 'The changes below have been applied immediately.' : 'No gameplay values changed.',
       wrestlerIds: [cast.a.id, cast.b?.id].filter(Boolean),
       date,
     };
@@ -2457,6 +2493,7 @@ function runHouseShow(card = null, date = state.date) {
   const results = matches.map((match, index) => {
     const projection = projectMatch(match, {
       venue, stage, isMainEvent: index === matches.length - 1, position: index, cardSize: matches.length,
+      history: state.history,
       staminaLookup: staminaFor, moraleLookup: moraleFor, titles: state.titles, teams: state.teams,
     });
     projection.quality.low = Math.max(0, projection.quality.low - 6);
@@ -2522,7 +2559,18 @@ function runHouseShow(card = null, date = state.date) {
 // A free agent's first act on the roster is a debut arrival promo — team player,
 // cocky dominator, calling someone out, or riffing on the league's own history. Runs
 // once per signing regardless of which path (courting session or blackjack) closed it.
+function recordWrestlerCard(wrestlerId, target = state) {
+  const wrestler = getWrestlerById(wrestlerId);
+  if (!wrestler || wrestler.custom || getDraftTier(wrestler) === 'celebrity') return;
+  target.cards.collectedWrestlerIds = [...new Set([...(target.cards.collectedWrestlerIds ?? []), wrestlerId])];
+  const trophy = TROPHIES.find(entry => entry.id === 'gotta-catch-em-all');
+  if (!target.trophies[trophy.id] && trophy.test(null, target)) {
+    target.trophies[trophy.id] = { date: target.date, show: target.show.name };
+  }
+}
+
 function finalizeFreeAgentSigning(wrestlerId) {
+  recordWrestlerCard(wrestlerId);
   if (!state.draft.signedIds.includes(wrestlerId)) state.draft.signedIds.push(wrestlerId);
   state.signedShows[wrestlerId] = state.showNumber;
   const wrestler = getWrestlerById(wrestlerId);
@@ -2763,6 +2811,7 @@ export function dismissAnnualReveal() {
 // ---------------------------------------------------------------------------
 
 function queueForIntake(wrestlerId) {
+  recordWrestlerCard(wrestlerId);
   state.cards.intakeQueue = [...(state.cards.intakeQueue ?? []), wrestlerId];
 }
 
@@ -2893,7 +2942,10 @@ export function gimmickStockFor(typeId) {
 // ---------------------------------------------------------------------------
 
 export function getCribPacks() {
-  return Object.values(CRIB_PACKS).sort((first, second) => first.cost - second.cost).map(pack => ({
+  return Object.values(CRIB_PACKS).map(pack => ({
+    ...pack,
+    cost: packCostForGMLevel(pack.cost, getGMLevel()),
+  })).sort((first, second) => first.cost - second.cost).map(pack => ({
     ...pack,
     affordable: state.bankroll >= pack.cost,
     soldOut: Boolean(pack.wrestlers && !pack.customWrestler && !packFreeAgents().length),
@@ -2984,16 +3036,18 @@ function rollPackWrestler(allowedTiers = null, tierWeights = CRIB_PACKS['free-ag
 }
 
 export function buyPack(kind) {
-  const pack = CRIB_PACKS[kind];
-  if (!pack) return { ok: false, message: 'No such pack in the catalog.' };
-  if (pack.customWrestler) return { ok: false, message: 'Create your wrestler before purchasing this pack.' };
+  const basePack = CRIB_PACKS[kind];
+  if (!basePack) return { ok: false, message: 'No such pack in the catalog.' };
+  if (basePack.customWrestler) return { ok: false, message: 'Create your wrestler before purchasing this pack.' };
+  const pack = { ...basePack, cost: packCostForGMLevel(basePack.cost, getGMLevel()) };
   return awardPack(pack);
 }
 
 export function buyCustomWrestlerPack(data) {
-  const pack = CRIB_PACKS['custom-wrestler'];
+  const basePack = CRIB_PACKS['custom-wrestler'];
+  const pack = { ...basePack, cost: packCostForGMLevel(basePack.cost, getGMLevel()) };
   if (state.cards.pendingPack) return { ok: false, message: 'Finish opening your waiting pack first.' };
-  if (state.bankroll < pack.cost) return { ok: false, message: `This pack costs $${pack.cost.toLocaleString()}.` };
+  if (state.bankroll < pack.cost) return { ok: false, message: `This pack costs $${pack.cost.toLocaleString()}. Available cash: $${state.bankroll.toLocaleString()}.` };
   let sequence = (state.customWrestlers?.length ?? 0) + 1;
   while (getWrestlerById(`custom-${sequence}`)) sequence += 1;
   const wrestler = createCustomWrestler(data, `custom-${sequence}`, state.date);
@@ -3015,7 +3069,7 @@ export function buyCustomWrestlerPack(data) {
 function awardPack(pack, free = false, createdWrestler = null) {
   if (state.cards.pendingPack) return { ok: false, message: 'Finish opening your waiting pack first.' };
   if (!free && state.bankroll < pack.cost) {
-    return { ok: false, message: `${pack.name} runs $${pack.cost.toLocaleString()}.` };
+    return { ok: false, message: `${pack.name} costs $${pack.cost.toLocaleString()}. Available cash: $${state.bankroll.toLocaleString()}.` };
   }
 
   const wrestler = pack.customWrestler ? createdWrestler : pack.wrestlers ? rollPackWrestler(pack.wrestlerTiers, pack.wrestlerTierWeights) : null;
@@ -3962,7 +4016,7 @@ export function runShow() {
   result.debuts = wrestlers
     .filter(w => w.debutShow === state.showNumber)
     .map(w => ({ id: w.id, name: w.name, tier: getDraftTier(w) }));
-  state.show = createShow(state.showNumber, state.eventBranding);
+  state.show = createShow(state.showNumber, state.eventBranding, nextTourVenueId());
   syncMatchLengths();
   if (tragedy) {
     state.show.tribute = { wrestlerId: tragedy.id, name: tragedy.name };

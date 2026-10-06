@@ -2,7 +2,7 @@
 // (stipulations and full P&L) lives behind a fold.
 
 import { wrestlers, getWrestlerById, computeChemistry, momentumLabel, recordString, getDraftTier, GAME_START_DATE } from '../data/wrestlers.js';
-import { venues, getVenueById, homeFieldTier, venueRequiredLevel, venueUnlocked } from '../data/venues.js';
+import { venues, getVenueById, venueRequiredLevel, venueUnlocked } from '../data/venues.js';
 import {
   getMatchType, getStake,
 } from '../data/matchTypes.js';
@@ -12,7 +12,7 @@ import {
 } from './bookingEngine.js';
 import { TROPHIES, RECORD_DEFS, TROPHY_TIER_ORDER } from '../data/achievements.js';
 import { CHAMPIONSHIPS, getChampionship, prestigeLabel, titleBookable } from '../data/championships.js';
-import { previewText } from '../data/storylines.js';
+import { previewText, promoCharismaChance } from '../data/storylines.js';
 import { ACTIVITIES, getActivity, TRAINABLE_STATS, BUILDUP_WEEKS } from '../data/activities.js';
 import { PROMO_PARTNER_FEE } from '../data/promos.js';
 import { TIER_LABELS } from '../data/draft.js';
@@ -29,9 +29,9 @@ import { wrestlerImageUrl } from '../data/wrestlerImages.js';
 import { companyLogoUrl } from '../data/companyLogo.js';
 import { createElement, Share2, Download, ArrowLeft, Check, RotateCcw, Dumbbell, Mic, Map as MapIcon } from 'lucide';
 import { marketHeatmapHtml } from './marketHeatmap.js';
-import { marketHypeForVenue, hypeTier, MARKET_LOCATIONS } from './marketHype.js';
+import { marketHypeForVenue, hypeTier, MARKET_LOCATIONS, recommendTourVenue } from './marketHype.js';
 
-const view = { name: 'card', slot: null, titleId: null, titleHistoryPage: 0, rosterCandidate: null, resultIndex: 0, resultMatch: 0, storylinePartnerId: null, leadUpActivity: null, leadUpWrestler: null, lockerRoomAllocation: {}, promoWrestler: null, promoPartner: null, houseShow: null, housePick: null, houseCandidate: null, houseResult: null, teamMembers: [], teamName: '', monthlyTrainingIds: [], monthlySpotlightId: null, monthlyPromoPick: null, monthlyGuide: 'training', monthlyPhaseResult: null, packResult: null, packFlipped: [], annualOpened: false };
+const view = { name: 'card', slot: null, titleId: null, titleHistoryPage: 0, rosterCandidate: null, resultIndex: 0, resultMatch: 0, storylinePartnerId: null, leadUpActivity: null, leadUpWrestler: null, lockerRoomAllocation: {}, promoWrestler: null, promoPartner: null, houseShow: null, housePick: null, houseCandidate: null, houseResult: null, teamMembers: [], teamName: '', monthlyTrainingIds: [], monthlySpotlightId: null, monthlyPromoPick: null, monthlyGuide: 'training', monthlyPhaseResult: null, incidentResult: null, packResult: null, packFlipped: [], annualOpened: false };
 const open = new Set();
 const teamSort = { key: 'w', dir: 'desc' };
 
@@ -158,6 +158,11 @@ function matchRowHtml(match, index, p, total) {
     p.valid ? `${p.minutes} min` : null,
     p.valid ? compactMoney(p.cost) : null,
   ].filter(Boolean).join(' · ');
+  const variety = p.varietyBonus;
+  const varietySignals = [
+    variety?.freshFaceQuality ? `FRESH FACE +${variety.freshFaceQuality.toFixed(1)} GRADE · +${variety.freshFaceBuzz} HYPE` : '',
+    variety?.losingStreakQuality ? `LOSING STREAK +${variety.losingStreakQuality.toFixed(1)} GRADE · +${variety.losingStreakBuzz} HYPE` : '',
+  ].filter(Boolean);
 
   return `<article class="bk-match ${index === total - 1 ? 'is-main' : ''}">
     <div class="bk-match-row">
@@ -178,6 +183,7 @@ function matchRowHtml(match, index, p, total) {
       </div>
     </div>
     ${p.warnings.length ? `<p class="bk-match-flag">${p.warnings[0]}${p.warnings.length > 1 ? ` <em>+${p.warnings.length - 1} more</em>` : ''}</p>` : ''}
+    ${varietySignals.length ? `<p class="bk-match-spotlight">${varietySignals.join(' · ')}</p>` : ''}
   </article>`;
 }
 
@@ -238,10 +244,9 @@ function cardViewHtml() {
           <small>THE CARD · ${show.matches.length} MATCHES</small>
           <span class="bk-section-buttons">
             <button data-bk="auto-book">⚡ AUTO-BOOK</button>
-            <button data-bk="add-match" ${show.matches.length >= booking.getMaxMatches() ? 'disabled' : ''} title="${booking.getMaxMatches() >= booking.MAX_MATCHES ? '' : `The next match slot needs ${booking.experienceUntilExtraMatchSlot()} more GM XP.`}">+ ADD MATCH</button>
+            <button data-bk="add-match" ${show.matches.length >= booking.getMaxMatches() ? 'disabled' : ''}>+ ADD MATCH</button>
           </span>
         </div>
-        ${booking.getMaxMatches() < booking.MAX_MATCHES ? `<p class="bk-storyline-desc">${booking.getMaxMatches() === booking.MIN_MATCHES ? 'Three-match cards keep the early roster from feeling repetitive.' : 'Four-match cards give a maturing roster room to breathe.'} The next match slot needs ${booking.experienceUntilExtraMatchSlot()} more GM XP.</p>` : ''}
         ${show.matches.map((match, index) => matchRowHtml(match, index, p.matches[index], show.matches.length)).join('')}
 
       </section>
@@ -254,6 +259,8 @@ function cardViewHtml() {
         </div>
         <div class="bk-quickstats">
           <span><small>EXPECTED GATE</small><b>${p.attendanceRange.low.toLocaleString()}–${p.attendanceRange.high.toLocaleString()}</b><em>${p.fillPercent}% of house</em></span>
+          <span><small>TV FORECAST</small><b>${p.tvRatingRange.low.toFixed(1)}–${p.tvRatingRange.high.toFixed(1)}</b><em>${Math.round(p.tvViewers / 1000).toLocaleString()}K expected viewers</em></span>
+          <span><small>REGULAR TV AUDIENCE</small><b>${Math.round(p.tvAudience / 1000).toLocaleString()}K</b><em>Built through completed PPVs</em></span>
           <span><small>FRESHNESS</small><b class="${p.freshness.score < 60 ? 'bad' : ''}">${freshnessLabel(p.freshness.score)}</b><em>${p.freshness.score}/100</em></span>
         </div>
         ${readList([...p.matches.flatMap(m => m.factors ?? []), ...p.factors].sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta)), 3)}
@@ -297,7 +304,7 @@ function gimmickStockHtml() {
         </article>`).join('')}</div>`
       : '<p class="bk-empty">No Promo cards in stock. Packs add stories to play during the monthly promo.</p>'}
     ${view.packResult ? `<div class="gimmick-card-grid tight pack-opened">${view.packResult.map(card => `<article class="gimmick-card rarity-${card.rarity?.id ?? 'common'}"><small>NEW · ${card.kind === 'promo' ? 'PROMO · ' : ''}${card.rarity?.name ?? 'Common'}</small><b>${card.name}</b></article>`).join('')}</div>` : ''}
-    <small class="bk-label spaced">PACK CATALOG</small>
+    <small class="bk-label spaced">PACK CATALOG · PRICES SCALE WITH GM LEVEL</small>
     <div class="crib-pack-list">${packs.map(pack => `<button class="crib-pack" style="--pack-color:${pack.color}" data-bk="buy-pack" data-value="${pack.id}" ${pack.affordable && !pack.soldOut ? '' : 'disabled'}>
       <span class="crib-pack-copy"><b>${pack.name}</b><small>${pack.blurb}</small></span>
       <span class="crib-pack-cost">${pack.soldOut ? 'SOLD OUT' : compactMoney(pack.cost)}</span>
@@ -307,33 +314,53 @@ function gimmickStockHtml() {
 
 function venueViewHtml() {
   const show = booking.getShow();
-  const history = booking.getState().history;
+  const state = booking.getState();
   const gmLevel = booking.getGMLevel();
-  const booked = show.matches.flatMap(matchParticipantIds).map(getWrestlerById).filter(Boolean);
+  const tourHistory = [
+    ...(state.archive ?? []).map(entry => ({ ...entry, venueId: entry.venueId ?? venues.find(venue => venue.city === entry.city)?.id })),
+    ...(state.houseShows ?? []).map(entry => ({ ...entry, showName: 'House Show', venueId: venues.find(venue => venue.city === entry.city)?.id })),
+  ].sort((first, second) => String(second.date ?? '').localeCompare(String(first.date ?? '')));
+  const recentVenueIds = state.history.slice(0, 3).map(entry => entry.venueId);
+  const previousVenue = venues.find(venue => venue.id === recentVenueIds[0]);
+  const homeRegion = MARKET_LOCATIONS[state.company.homeCity]?.region;
+  const recommended = recommendTourVenue(
+    venues.filter(venue => venueUnlocked(venue, gmLevel)), state.marketHype,
+    recentVenueIds, previousVenue?.region ?? homeRegion, state.company.homeCity,
+  );
 
   return `<div class="bk">
-    ${backBar('Choose the market', 'Bigger buildings cost more to run. Every crowd wants something different.')}
+    ${backBar('Plan the tour', 'Build nearby markets, watch each city cool after a stop, and return when its crowd is ready.')}
     <div class="bk-venue-map-action"><button type="button" class="bk-heatmap-open" data-bk="view" data-value="heatmap">${createElement(MapIcon, { width: 18, height: 18, 'aria-hidden': 'true' }).outerHTML}<span>Heatmap</span></button></div>
     <div class="bk-grid">
       ${[...venues].sort((a, b) => venueRequiredLevel(a) - venueRequiredLevel(b) || a.capacity - b.capacity).map(v => {
-        const recent = history[0]?.venueId === v.id;
-        const draws = booked.filter(w => homeFieldTier(w, v));
         const requiredLevel = venueRequiredLevel(v);
         const unlocked = venueUnlocked(v, gmLevel);
+        const hype = marketHypeForVenue(state.marketHype, v);
+        const cityVisits = tourHistory.filter(entry => entry.city === v.city);
+        const visitCount = Math.max(state.marketHype.visits?.[v.city] ?? 0, cityVisits.length);
+        const lastVisit = cityVisits[0];
+        const visitsAgo = tourHistory.findIndex(entry => entry.city === v.city);
+        const tier = hypeTier(hype);
+        const cooling = visitsAgo >= 0 && visitsAgo < 3;
+        const timing = cooling ? 'COOLING AFTER A RECENT STOP'
+          : hype >= 80 ? 'AT PEAK'
+            : hype >= 55 ? 'READY FOR A RETURN'
+              : hype >= 30 ? 'BUILDING A FOLLOWING' : 'NEW MARKET TO GROW';
+        const cue = cooling ? 'Give the local crowd a little room before coming back.'
+          : hype >= 80 ? 'The crowd is hot. A strong card can make this a major night.'
+            : hype >= 55 ? 'Regional momentum is strong. This is a good window to return.'
+              : 'Nearby shows can warm this market before you bring the tour here.';
+        const lastVisitLabel = lastVisit?.date
+          ? new Date(`${lastVisit.date}T12:00:00`).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+          : 'NEVER';
         return `<button class="bk-option wide ${show.venueId === v.id ? 'selected' : ''} ${unlocked ? '' : 'locked'}" data-bk="venue" data-value="${v.id}" ${unlocked ? '' : 'disabled'}>
-          <span class="bk-option-head"><b>${v.city}</b><em>TOUR TIER ${requiredLevel} · ${compactMoney(v.rental + v.travel)}</em></span>
+          <span class="bk-option-head"><b>${v.city}</b><em>VENUE TIER ${requiredLevel} · ${compactMoney(v.rental + v.travel)}</em></span>
+          ${recommended?.id === v.id && unlocked ? '<small class="venue-route-pick">RECOMMENDED TOUR STOP</small>' : ''}
           <span class="bk-option-meta">${v.name} · ${v.capacity.toLocaleString()} seats · $${v.baseTicket} tickets</span>
-          <div class="bk-taste">
-            <span style="color:${hypeTier(marketHypeForVenue(booking.getState().marketHype, v)).color}">YOUR HYPE ${marketHypeForVenue(booking.getState().marketHype, v)}/100</span>
-            <span>HEAT ${v.marketHeat}</span><span>PRESTIGE ${v.prestige}</span><span>TV ${Math.round(v.tvReach * 100)}%</span>
-            ${Object.entries(v.crowdTaste)
-              .filter(([, mult]) => mult >= 1.12 || mult <= 0.92)
-              .map(([k, mult]) => `<span class="${mult >= 1.12 ? 'hot' : 'cold'}">${mult >= 1.12 ? 'LOVES' : 'COLD ON'} ${k}</span>`).join('')}
-          </div>
-          <small>${v.notes}</small>
+          <div class="venue-tour-history"><span><b>${visitCount}</b> SHOW${visitCount === 1 ? '' : 'S'} HERE</span><span>LAST STOP <b>${lastVisitLabel}</b></span></div>
+          <div class="venue-hype-meter"><div><small>CITY HYPE</small><b style="color:${tier.color}">${hype}/100 · ${timing}</b></div><span role="meter" aria-label="${v.city} hype" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${hype}"><i style="width:${hype}%;background:${tier.color}"></i></span><small>${cue}</small></div>
+          <span class="venue-route-context">${MARKET_LOCATIONS[v.city]?.region?.toUpperCase() ?? 'INTERNATIONAL'} ROUTE · ${Math.round(v.tvReach * 100)}% LOCAL TV REACH</span>
           ${unlocked ? '' : `<small class="bk-flag">GM LEVEL ${requiredLevel} REQUIRED · YOU'RE LEVEL ${gmLevel}</small>`}
-          ${recent ? '<small class="bk-flag">You ran here last show — the market is tapped.</small>' : ''}
-          ${draws.length ? `<small class="bk-flag good">Hometown draw: ${draws.map(w => w.name).join(', ')}</small>` : ''}
         </button>`;
       }).join('')}
     </div>
@@ -350,8 +377,8 @@ function venueViewHtml() {
 function slotButtonHtml(match, teamIndex, slotIndex, id) {
   const w = id ? getWrestlerById(id) : null;
   return `<div class="bk-slot ${w ? 'filled' : ''}">
-    <button data-bk="pick-slot" data-match="${match.id}" data-team="${teamIndex}" data-index="${slotIndex}">
-      ${w ? `${wrestlerPortraitHtml(w, 'bk-slot-portrait')}<span><b>${w.name}</b><small>${w.style} · POP ${w.popularity} · STA ${booking.staminaFor(w.id)}</small></span>` : '<b>+ Book a wrestler</b><small>Empty slot</small>'}
+    <button type="button" data-bk="pick-slot" data-match="${match.id}" data-team="${teamIndex}" data-index="${slotIndex}">
+      ${w ? `${wrestlerPortraitHtml(w, 'bk-slot-portrait')}<span class="bk-slot-copy"><b>${w.name}</b><small>${w.style} · POP ${w.popularity} · STA ${booking.staminaFor(w.id)}</small></span>` : '<span class="bk-slot-copy"><b>+ Book a wrestler</b><small>Empty slot</small></span>'}
     </button>
     ${w ? `<button class="bk-slot-clear" data-bk="clear-slot" data-match="${match.id}" data-team="${teamIndex}" data-index="${slotIndex}">✕</button>` : ''}
   </div>`;
@@ -461,7 +488,7 @@ function micTileHtml(match, id, selection) {
   const selected = selection?.match.id === match.id && view.monthlySpotlightId === id;
   return `<button class="mic-tile ${selected ? 'selected' : ''}" data-bk="monthly-spotlight" data-value="${id}" data-match="${match.id}">
     ${wrestlerPortraitHtml(wrestler, 'bk-wrestler-portrait mic-tile-portrait')}
-    <span class="mic-tile-copy"><b>${wrestler.name}</b><small>CHA ${wrestler.stats?.charisma ?? '—'}</small>${promoCard?.wrestlerId === id ? `<em>${promoCard.name}</em>` : ''}</span>
+    <span class="mic-tile-copy"><b>${wrestler.name}</b><small title="Charisma above 50 grants a chance to roll twice and keep the better reward. Lower charisma keeps standard odds.">CHA ${wrestler.stats?.charisma ?? '—'} · BONUS ROLL ${Math.round(promoCharismaChance(wrestler.stats?.charisma) * 100)}%</small>${promoCard?.wrestlerId === id ? `<em>${promoCard.name}</em>` : ''}</span>
   </button>`;
 }
 
@@ -515,6 +542,7 @@ function matchViewHtml() {
     position: index,
     cardSize: show.matches.length,
     staleness: stalenessForMatch(match, show, booking.getState().history, index),
+    history: booking.getState().history,
     staminaLookup: booking.staminaFor,
   });
 
@@ -549,13 +577,13 @@ function matchViewHtml() {
           </button>`;
         }).join('')}</section>` : ''}
 
-        <div class="bk-teams">
+        <div class="bk-teams" style="--bk-team-columns:${match.teams.length === 4 ? 2 : Math.min(3, match.teams.length)};--bk-team-mobile-columns:${Math.min(2, match.teams.length)}">
           ${match.teams.map((team, teamIndex) => `
-            <div class="bk-team ${type.slots.teams && teamIndex < 2 ? `corner-${teamIndex === 0 ? 'a' : 'b'}` : ''}">
-              <header><span>${type.slots.teams ? `CORNER ${String.fromCharCode(65 + teamIndex)}` : 'THE FIELD'}</span></header>
+            <div class="bk-team ${!type.slots.teams ? 'bk-team-field' : teamIndex < 2 ? `corner-${teamIndex === 0 ? 'a' : 'b'}` : ''}">
+              <header><span>${type.slots.teams ? `CORNER ${String.fromCharCode(65 + teamIndex)}` : 'THE FIELD'}</span>${type.slots.teams && teamIndex > 0 ? '<span class="bk-team-vs" aria-hidden="true">VS</span>' : ''}</header>
               ${Array.from({ length: perTeam }, (_, slotIndex) => slotButtonHtml(match, teamIndex, slotIndex, team[slotIndex])).join('')}
             </div>
-          `).join(type.slots.teams ? '<div class="bk-team-vs">VS</div>' : '')}
+          `).join('')}
         </div>
 
         <section class="bk-finish-panel">
@@ -639,15 +667,15 @@ function rosterViewHtml() {
     .map(({ w, rank, champion }) => ({ w, rank, champion, booked: booking.isBooked(w.id), injury: booking.injuryFor(w.id) }));
 
   const candidate = getWrestlerById(view.rosterCandidate);
+  const candidateRanking = rows.find(({ w }) => w.id === candidate?.id);
 
   return `<div class="bk house-pick-screen">
     <div class="bk-back"><button data-bk="roster-cancel">← MATCH</button><div><b>Book Wrestler</b><small>${positionLabel(booking.getShow().matches.indexOf(match), booking.getShow().matches.length)} · ${getMatchType(match.typeId).name}</small></div></div>
     <div class="house-roster-select">
     <div class="house-roster-grid">
-      ${rows.map(({ w, rank, champion, booked, injury }) => `
+      ${rows.map(({ w, booked, injury }) => `
         <button type="button" class="house-roster-tile ${booked ? 'booked' : ''} ${view.rosterCandidate === w.id ? 'selected' : ''}" data-bk="${view.rosterCandidate === w.id ? 'roster-confirm' : 'roster-highlight'}" data-value="${w.id}" ${injury ? 'disabled' : ''}>
           <span class="house-roster-photo">
-            <span class="house-roster-rank ${champion ? 'champion' : ''}" aria-label="${champion ? 'Champion' : `Power rank ${rank}`}" title="${champion ? 'Champion' : `Power ranking #${rank}`}">${champion ? 'C' : `#${rank}`}</span>
             ${wrestlerImageUrl(w) ? `<img src="${wrestlerImageUrl(w)}" alt="${w.name}">` : `<span class="house-roster-initials">${w.name.split(' ').map(part => part[0]).slice(0, 2).join('')}</span>`}
             ${injury ? `<em class="house-roster-badge">INJURED</em>` : booked ? `<em class="house-roster-badge">BOOKED</em>` : view.rosterCandidate === w.id ? `<em class="house-roster-badge">SELECTED</em>` : ''}
           </span>
@@ -655,7 +683,7 @@ function rosterViewHtml() {
         </button>`).join('')}
     </div>
     <div class="house-roster-detail">
-      ${candidate ? `<div class="house-roster-detail-main"><div><div class="house-roster-detail-heading"><b><button type="button" class="profile-link inline" data-profile="${candidate.id}" title="View wrestler profile">${candidate.name}</button></b><span class="house-roster-record">(${recordString(candidate.record)})</span></div><small>${candidate.style} · POP ${candidate.popularity} · STA ${booking.staminaFor(candidate.id)} · ${momentumLabel(candidate.momentum)}</small><p>${candidate.bio}</p></div></div>
+      ${candidate ? `<div class="house-roster-detail-main"><div><div class="house-roster-detail-heading"><b><button type="button" class="profile-link inline" data-profile="${candidate.id}" title="View wrestler profile">${candidate.name}</button></b><span class="house-roster-record">(${recordString(candidate.record)})${candidateRanking ? ` <span class="house-roster-detail-rank">${candidateRanking.champion ? 'Champion' : `#${candidateRanking.rank} Contender`}</span>` : ''}</span></div><small>${candidate.style} · POP ${candidate.popularity} · STA ${booking.staminaFor(candidate.id)} · ${momentumLabel(candidate.momentum)}</small><p>${candidate.bio}</p></div></div>
       <div class="bk-taste"><span>STR ${candidate.stats.strength}</span><span>AGI ${candidate.stats.agility}</span><span>STA ${candidate.stats.stamina}</span><span>TECH ${candidate.stats.technique}</span><span>CHA ${candidate.stats.charisma}</span><span>TGH ${candidate.stats.toughness}</span></div>
       <div class="house-roster-actions"><button type="button" class="bk-primary" data-bk="roster-confirm">ADD TO MATCH</button><button type="button" class="house-roster-profile" data-profile="${candidate.id}">VIEW PROFILE</button></div>` : '<p class="bk-empty">Choose a wrestler to see their details.</p>'}
     </div>
@@ -695,7 +723,7 @@ function resultsViewHtml() {
       <header class="poster-head">
         <small>${booking.getCompanyIdentity().name.toUpperCase()} PRESENTS</small>
         <h1>${result.showName}</h1>
-        <p>${result.date} &nbsp;·&nbsp; ${result.venueName} &nbsp;·&nbsp; ${result.city}</p>
+        <div class="poster-event-meta"><span>${result.date}</span><span>${result.venueName} · ${result.city}</span></div>
         ${result.fillPercent >= 97 ? '<span class="poster-stamp">SOLD OUT</span>' : ''}
       </header>
 
@@ -708,16 +736,13 @@ function resultsViewHtml() {
         </div>
       </div>
 
-      ${result.matches.at(-1) ? `<div class="poster-main-event">${matchPortraitsHtml(result.matches.at(-1).participantIds, 'poster-main-event-portraits')}<span>MAIN EVENT · ${result.matches.at(-1).sideNames.join(' VS ')}</span></div>` : ''}
-
       <ol class="poster-card">
         ${[...result.matches].reverse().map(m => `
           <li>
             <button data-bk="result-match" data-value="${result.matches.indexOf(m)}">
               ${matchPortraitsHtml(m.participantIds, 'poster-card-portraits')}
-              <span class="poster-slot">${m.label}${m.stakeId !== 'none' ? ` · ${booking.companyBrandedText(m.stakeName)}` : ''}</span>
+              <span class="poster-slot">${m.label}<small class="poster-type">${m.typeName}</small>${m.stakeId !== 'none' ? ` · ${booking.companyBrandedText(m.stakeName)}` : ''}</span>
               <span class="poster-result">${outcomeLine(m)}</span>
-              <span class="poster-meta">${m.typeName} · ${m.finish}</span>
               <span class="poster-rating"><em>${m.stars}</em><small>${m.rating}</small></span>
               ${m.titleOutcome && (m.titleOutcome.type === 'change' || m.titleOutcome.type === 'crowned') ? '<span class="poster-tag belt">NEW CHAMPION</span>' : m.upset ? '<span class="poster-tag">UPSET</span>' : ''}
             </button>
@@ -726,7 +751,7 @@ function resultsViewHtml() {
 
       <div class="poster-numbers">
         <span><small>ATTENDANCE</small><b>${result.attendance.toLocaleString()}</b><em>${result.fillPercent}% of ${result.capacity.toLocaleString()}</em></span>
-        <span><small>HOME VIEWERS</small><b>${Math.round(result.tvViewers / 1000).toLocaleString()}K</b><em>${result.tvRating} rating</em></span>
+        <span><small>HOME VIEWERS</small><b>${Math.round(result.tvViewers / 1000).toLocaleString()}K</b><em>${result.tvRating} rating${result.tvAudienceChange != null ? ` · regular audience ${result.tvAudienceChange >= 0 ? '+' : ''}${Math.round(result.tvAudienceChange / 1000).toLocaleString()}K` : ''}</em></span>
         <span><small>TICKET GATE</small><b>${compactMoney(result.revenue.gate)}</b><em>box office</em></span>
         <span><small>TV / RIGHTS</small><b>${compactMoney(result.revenue.television)}</b><em>broadcast fee</em></span>
         <span><small>MERCHANDISE</small><b>${compactMoney(result.revenue.merch)}</b><em>${money(Math.round(result.revenue.merch / Math.max(result.attendance, 1)))} per head</em></span>
@@ -742,12 +767,12 @@ function resultsViewHtml() {
 
       ${bookerReportHtml(result.report)}
       ${titleReportHtml(result)}
-      ${progressHtml(result.progress)}
-      ${agingHtml(result.aging)}
+      ${progressHtml(result.progress?.awards ? { ...result.progress, awards: null } : result.progress)}
+      ${result.progress?.awards ? '' : agingHtml(result.aging)}
       ${debutsHtml(result.debuts)}
 
       <footer class="poster-foot">
-        <button class="bk-primary" data-bk="view" data-value="card">BOOK THE NEXT SHOW →</button>
+        <button class="bk-primary" data-bk="view" data-value="${result.progress?.awards ? 'year-recap' : 'card'}">${result.progress?.awards ? 'CONTINUE TO YEAR IN REVIEW →' : 'BOOK THE NEXT SHOW →'}</button>
         <button data-bk="view" data-value="trophies">TROPHY ROOM</button>
         <button data-bk="view" data-value="records">RECORD BOOK</button>
       </footer>
@@ -769,6 +794,41 @@ function incidentViewHtml() {
     <small class="bk-label">YOUR RESPONSE</small>
     <div class="incident-choices">${incident.choices.map(choice => `<button class="bk-option wide" data-bk="incident-choice" data-value="${choice.id}"><b>${choice.label}</b><span>${choice.detail}</span></button>`).join('')}</div>
     <p class="incident-note">This alternate-history event was generated from current morale, trust, injuries, and personality. Your response becomes part of the company record.</p>
+  </div>`;
+}
+
+function incidentMetricSnapshot(wrestlerId) {
+  const wrestler = getWrestlerById(wrestlerId);
+  if (!wrestler) return null;
+  return {
+    id: wrestlerId,
+    name: wrestler.name,
+    values: {
+      Morale: booking.moraleFor(wrestlerId),
+      Trust: booking.relationshipFor(wrestlerId),
+      Momentum: wrestler.momentum,
+      Popularity: wrestler.popularity,
+      Stamina: booking.staminaFor(wrestlerId),
+      'Injury time': booking.injuryFor(wrestlerId),
+    },
+  };
+}
+
+function incidentResultHtml() {
+  const outcome = view.incidentResult;
+  if (!outcome) return resultsViewHtml();
+  const people = outcome.people.map(person => {
+    const changes = Object.entries(person.after.values).flatMap(([label, value]) => {
+      const delta = value - person.before.values[label];
+      return delta ? [`<li>${label} ${delta > 0 ? '+' : ''}${delta} <small>(now ${value})</small></li>`] : [];
+    });
+    return `<section class="incident-result-person"><b>${person.after.name}</b>${changes.length ? `<ul>${changes.join('')}</ul>` : '<p>No tracked stats changed.</p>'}</section>`;
+  }).join('');
+  const cashChange = outcome.cashAfter - outcome.cashBefore;
+  return `<div class="bk incident-screen incident-result-screen">
+    <header class="incident-head"><small>DECISION RECORDED · ${outcome.incident.title.toUpperCase()}</small><h1>${outcome.choiceLabel}</h1><p>${outcome.message}</p></header>
+    <section class="incident-result-ledger"><small>WHAT CHANGED</small>${people}${cashChange ? `<p class="incident-cash-change">Operating cash ${cashChange > 0 ? '+' : ''}${money(cashChange)} <small>(now ${money(outcome.cashAfter)})</small></p>` : ''}</section>
+    <button class="bk-primary incident-result-continue" data-bk="incident-result-continue">CONTINUE TO SHOW RESULTS</button>
   </div>`;
 }
 
@@ -832,9 +892,10 @@ function yearEndRecapHtml() {
         ${!recap.upcomingDebuts.length ? '<li>The field is open. January begins without an obvious path.</li>' : ''}
       </ul>
     </section>
+    ${agingHtml(result.aging)}
     <footer class="poster-foot">
-      <button class="bk-primary" data-bk="view" data-value="results">VIEW FINAL SHOW RESULTS</button>
-      <button data-bk="view" data-value="card">START THE NEXT YEAR</button>
+      <button class="bk-primary" data-bk="view" data-value="card">START THE NEXT YEAR →</button>
+      <button data-bk="view" data-value="results">BACK TO FINAL SHOW RESULTS</button>
       <button data-bk="view" data-value="records">RECORD BOOK</button>
     </footer>
   </div>`;
@@ -897,7 +958,7 @@ function agingHtml(changes) {
   const climbing = changes.filter(c => c.delta > 0).sort((a, b) => b.delta - a.delta).slice(0, 5);
   const slipping = changes.filter(c => c.delta < 0).sort((a, b) => a.delta - b.delta).slice(0, 5);
   if (!climbing.length && !slipping.length) return '';
-  const row = (entry, kind) => `<article class="trophy ${kind}"><span class="trophy-badge">${entry.delta > 0 ? '↑' : '↓'}</span><b>${entry.name}</b><small>Age ${entry.age} · ${entry.delta > 0 ? '+' : ''}${entry.delta} total across six attributes</small></article>`;
+  const row = (entry, kind) => `<article class="trophy ${kind}"><span class="trophy-badge">${entry.delta > 0 ? '↑' : '↓'}</span><b>${entry.name}</b><small>Age ${entry.age} · ${entry.delta > 0 ? '+' : ''}${entry.delta} total attribute points${entry.breakthrough ? ' · BREAKTHROUGH' : ''}</small></article>`;
   return `<section class="poster-progress">
     <div class="poster-trophies">
       <small class="bk-label">ANOTHER YEAR ON THE BODY</small>
@@ -1409,20 +1470,18 @@ function houseShowResultViewHtml() {
       <header class="poster-head">
         <small>${booking.getCompanyIdentity().name.toUpperCase()} LIVE EVENTS</small>
         <h1>House Show</h1>
-        <p>${result.date} &nbsp;·&nbsp; three-match live loop</p>
+        <div class="poster-event-meta"><span>${result.date}</span><span>Three-match live loop</span></div>
       </header>
       <div class="poster-grade">
         <div><b>${result.rating}</b><small>${ratingLabel(result.rating)}</small></div>
         <div class="poster-stars">${best?.stars ?? ''}</div>
         <div class="poster-grade-meta"><span>${result.matches.length} matches run</span><span class="${result.profit >= 0 ? 'good' : 'bad'}">${signed(result.profit)} net</span></div>
       </div>
-      ${result.matches.at(-1) ? `<div class="poster-main-event">${matchPortraitsHtml(result.matches.at(-1).participantIds, 'poster-main-event-portraits')}<span>MAIN EVENT · ${result.matches.at(-1).sideNames.join(' VS ')}</span></div>` : ''}
       <ol class="poster-card">
         ${[...result.matches].reverse().map(match => `<li><button type="button">
           ${matchPortraitsHtml(match.participantIds, 'poster-card-portraits')}
-          <span class="poster-slot">${match.label}</span>
+          <span class="poster-slot">${match.label}<small class="poster-type">${match.typeName ?? getMatchType(match.typeId)?.name ?? match.typeId}</small></span>
           <span class="poster-result">${outcomeLine(match)}</span>
-          <span class="poster-meta">${match.typeName ?? getMatchType(match.typeId)?.name ?? match.typeId} · ${match.finish}</span>
           <span class="poster-rating"><em>${match.stars}</em><small>${match.rating}</small></span>
         </button></li>`).join('')}
       </ol>
@@ -2169,11 +2228,16 @@ function randomEventModalHtml() {
   const event = booking.getRandomEvent();
   if (!event?.resolved || event.seen || !event.result) return '';
   const result = event.result;
+  const effects = (result.effects ?? []).map(effect => effect.replace(/^Profile Promo:/, 'Profile story recorded:'));
+  const profileOnly = result.kind === 'new-story' && effects.length > 0 && effects.every(effect => effect.startsWith('Profile story recorded:'));
+  const outcome = result.impactSummary ?? (profileOnly
+    ? 'Profile history only. No active rivalry was started, and match hype, momentum, and popularity are unchanged.'
+    : effects.length ? 'The changes below have been applied immediately.' : 'No gameplay values changed.');
   return `<div class="random-event-backdrop">
-    <article class="random-event-card kind-${result.kind}" role="dialog" aria-label="${result.title}">
-      <header><span class="random-event-icon">${RANDOM_EVENT_ICONS[result.kind] ?? '?'}</span><div><small>RANDOM EVENT · ${result.date ?? ''}</small><h3>${result.title}</h3></div></header>
-      <p>${result.body}</p>
-      <ul class="random-event-effects">${result.effects.map(effect => `<li>${effect}</li>`).join('')}</ul>
+    <article class="random-event-card kind-${result.kind}" role="dialog" aria-label="${financeText(result.title)}">
+      <header><span class="random-event-icon">${RANDOM_EVENT_ICONS[result.kind] ?? '?'}</span><div><small>RANDOM EVENT · ${financeText(result.date)}</small><h3>${financeText(result.title)}</h3></div></header>
+      <p>${financeText(result.body)}</p>
+      <section class="random-event-outcome"><small>OUTCOME</small><p>${financeText(outcome)}</p><ul class="random-event-effects">${effects.map(effect => `<li>${financeText(effect)}</li>`).join('')}</ul></section>
       ${result.wrestlerIds?.length ? `<div class="random-event-people"><small>INVOLVED</small>${result.wrestlerIds.map(id => {
         const wrestler = getWrestlerById(id);
         return wrestler ? `<button type="button" class="random-event-person" data-profile="${id}">${wrestlerPortraitHtml(wrestler)}<span>${wrestler.name}</span><em>VIEW PROFILE →</em></button>` : '';
@@ -2191,6 +2255,10 @@ export function bookingPanelHtml() {
 function bookingViewHtml() {
   if (!booking.isDraftComplete()) return foundingCeremonyViewHtml();
   if (booking.getFoundingStarter()) return foundingStarterViewHtml();
+  if (view.name === 'results') return resultsViewHtml();
+  if (view.name === 'result-match') return resultMatchViewHtml();
+  if (view.name === 'year-recap') return yearEndRecapHtml();
+  if (view.name === 'incident-result') return incidentResultHtml();
   if (booking.getAnnualReveal()) return annualRevealViewHtml();
   if (booking.getRosterIntake()) return rosterIntakeViewHtml();
   if (booking.isAnnualPullDue()) return annualPullViewHtml();
@@ -2202,9 +2270,6 @@ function bookingViewHtml() {
   if (view.name === 'match') return matchViewHtml();
   if (view.name === 'roster') return rosterViewHtml();
   if (view.name === 'history') return historyViewHtml();
-  if (view.name === 'year-recap') return yearEndRecapHtml();
-  if (view.name === 'results') return resultsViewHtml();
-  if (view.name === 'result-match') return resultMatchViewHtml();
   if (view.name === 'trophies') return trophyViewHtml();
   if (view.name === 'records') return recordsViewHtml();
   if (view.name === 'titles') return titlesViewHtml();
@@ -2227,6 +2292,7 @@ export function bookingPanelKicker() {
     const result = booking.getState().results[view.resultIndex];
     if (result) return `RESULTS · ${result.showName.toUpperCase()}`;
   }
+  if (view.name === 'incident-result') return 'AFTER THE SHOW · DECISION OUTCOME';
   if (view.name === 'leadup') return 'MONTHLY PLAN · TRAINING & STORY PROMO';
   if (view.name === 'history') return `SHOW HISTORY · ${booking.getState().history.length} LOGGED`;
   const show = booking.getShow();
@@ -2476,12 +2542,27 @@ export function handleBookingEvent(event, { toast = () => {}, onShowRun = () => 
       view.customPromoMatchId = null;
       return true;
     case 'incident-choice': {
+      const incident = booking.getPendingIncident();
+      const choice = incident?.choices.find(entry => entry.id === value);
+      const peopleBefore = (incident?.participants ?? []).map(incidentMetricSnapshot).filter(Boolean);
+      const cashBefore = booking.getState().bankroll;
       const result = booking.resolveIncident(value);
-      toast(result.message);
-      const latest = booking.getState().results[0];
-      view.name = latest?.progress?.awards ? 'year-recap' : 'results';
+      if (!result.ok) { toast(result.message); return true; }
+      view.incidentResult = {
+        incident: result.incident,
+        choiceLabel: choice?.label ?? 'Decision recorded',
+        message: result.message,
+        people: peopleBefore.map(before => ({ before, after: incidentMetricSnapshot(before.id) })),
+        cashBefore,
+        cashAfter: booking.getState().bankroll,
+      };
+      view.name = 'incident-result';
       return true;
     }
+    case 'incident-result-continue':
+      view.incidentResult = null;
+      view.name = 'results';
+      return true;
     case 'leadup-pick':
       view.leadUpActivity = value;
       view.leadUpWrestler = null;
@@ -2905,7 +2986,7 @@ export function handleBookingEvent(event, { toast = () => {}, onShowRun = () => 
         toast('The card is not ready to run.');
         return true;
       }
-      view.name = outcome.result.incident ? 'incident' : outcome.result.progress?.awards ? 'year-recap' : 'results';
+      view.name = 'results';
       view.resultIndex = 0;
       open.clear();
       onShowRun(outcome.result);

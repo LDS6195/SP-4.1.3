@@ -86,22 +86,45 @@ export function marketDemandMultiplier(hype, venue) {
   return hype ? .85 + marketHypeForVenue(hype, venue) * .008 : 1;
 }
 
+export function recommendTourVenue(candidates, hype, recentVenueIds = [], preferredRegion = null, homeCity = null) {
+  if (!recentVenueIds.length) {
+    const openingRoadStop = candidates.find(venue => venue.city === 'San Antonio, TX');
+    if (openingRoadStop) return openingRoadStop;
+  }
+  const recentStops = new Map(recentVenueIds.map((id, index) => [id, index]));
+  return candidates.map(venue => {
+    const score = marketHypeForVenue(hype, venue);
+    const timing = 36 - Math.abs(score - 64) * .45;
+    const recentIndex = recentStops.get(venue.id);
+    const cooldown = recentIndex === 0 ? 24 : recentIndex === 1 ? 14 : recentIndex === 2 ? 6 : 0;
+    const routeBonus = preferredRegion && venue.region === preferredRegion ? 8 : 0;
+    const costPenalty = Math.log10(1 + venue.rental + venue.travel) * 2.2;
+    const tierPenalty = Math.max(0, (venue.unlockLevel ?? 1) - 1) * 1.5;
+    const openingHomePenalty = venue.city === homeCity && recentVenueIds.length < 3 ? 14 : 0;
+    return { venue, score: timing + routeBonus - cooldown - costPenalty - tierPenalty - openingHomePenalty };
+  }).sort((first, second) => second.score - first.score || first.venue.rental - second.venue.rental)[0]?.venue ?? null;
+}
+
 export function updateMarketHype(hype, venue, result, { localOnly = false } = {}) {
   const location = MARKET_LOCATIONS[venue?.city];
   if (!location) return null;
   const before = marketHypeForVenue(hype, venue);
   const rating = clamp(result.rating);
   const quality = (rating - 35) / 65;
+  const comedownQuality = clamp(quality, 0, 1);
   const localGain = (quality >= 0 ? 5 + quality * 12 : quality * 12) * (localOnly ? .4 : 1);
   if (!localOnly) {
-    Object.keys(hype.markets).forEach(city => { hype.markets[city] *= .995; });
-    Object.keys(hype.regions).forEach(region => { hype.regions[region] *= .998; });
+    Object.keys(hype.markets).forEach(city => { hype.markets[city] *= .975; });
+    Object.keys(hype.regions).forEach(region => { hype.regions[region] *= .995; });
+    Object.keys(hype.countries).forEach(country => { hype.countries[country] *= .998; });
+    hype.global *= .999;
   }
-  hype.markets[venue.city] = clamp((hype.markets[venue.city] ?? 0) + localGain);
+  const comedown = (4 + (1 - comedownQuality) * 8) * (localOnly ? .5 : 1);
+  hype.markets[venue.city] = clamp((hype.markets[venue.city] ?? 0) - comedown);
   hype.visits[venue.city] = (hype.visits[venue.city] ?? 0) + 1;
-  if (location.country === 'USA') hype.regions[location.region] = clamp((hype.regions[location.region] ?? 0) + localGain * .25);
+  if (location.country === 'USA') hype.regions[location.region] = clamp((hype.regions[location.region] ?? 0) + localGain * .12);
   const broadcastGain = localOnly ? 0 : Math.max(0, (rating - 50) / 50) * Math.min(1.5, Math.max(0, result.tvViewers ?? 0) / 1000000) * 3;
   hype.countries[location.country] = clamp((hype.countries[location.country] ?? 0) + broadcastGain);
   if (broadcastGain > 1.5) hype.global = clamp(hype.global + (broadcastGain - 1.5) * .3);
-  return { city: venue.city, before, after: marketHypeForVenue(hype, venue), localGain: Math.round(localGain * 10) / 10, broadcastGain: Math.round(broadcastGain * 10) / 10 };
+  return { city: venue.city, before, after: marketHypeForVenue(hype, venue), localGain: Math.round(localGain * 10) / 10, comedown: Math.round(comedown * 10) / 10, broadcastGain: Math.round(broadcastGain * 10) / 10 };
 }

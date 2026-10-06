@@ -36,6 +36,22 @@ export function eventBroadcastGuarantee(venue, rating) {
   return Math.round(base * clamp((rating - 15) / 20, 0, 1));
 }
 
+export function growTelevisionAudience(current, rating, averageBuzz = 0) {
+  const audience = Math.max(0, Number(current) || 0);
+  const quality = clamp(Number(rating) || 0, 0, 100);
+  const retained = audience * (quality < 45 ? .94 : .995);
+  const growth = 8000 + clamp((quality - 45) / 45, 0, 1) * 45000 + clamp(Number(averageBuzz) || 0, 0, 100) * 160;
+  return Math.round(clamp(retained + growth, 0, 2400000));
+}
+
+export function televisionViewers(venue, rating, audience = 0, averageBuzz = 0) {
+  const quality = clamp(Number(rating) || 0, 0, 100);
+  const localReach = 1200000 * Math.max(0, Number(venue?.tvReach) || 0) * (.55 + quality / 110);
+  const loyalViewers = clamp(Number(audience) || 0, 0, 2400000) * .85 * (.6 + quality / 250);
+  const hypeMultiplier = 1 + clamp(Number(averageBuzz) || 0, 0, 100) * .0025;
+  return Math.round((localReach + loyalViewers) * hypeMultiplier);
+}
+
 export function clampPrice(categoryId, value) {
   const def = getPriceCategory(categoryId);
   if (!def) return value;

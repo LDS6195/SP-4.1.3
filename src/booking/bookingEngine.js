@@ -5,14 +5,14 @@
 // injury exposure, and how stale the booking is getting.
 
 import { getWrestlerById, computeChemistry } from '../data/wrestlers.js';
-import { getVenueById, homeFieldTier } from '../data/venues.js';
+import { getVenueById } from '../data/venues.js';
 import { getMatchType, getStake, getMatchLength } from '../data/matchTypes.js';
 import { CHAMPIONSHIPS, getChampionship, defenseStatus, titleMatchCompatible } from '../data/championships.js';
 import {
   getPromoTier, getStagePackage, getTicketTier,
 } from '../data/production.js';
 import {
-  concessionsPerHead, demandModFromRatio, goodwillDemandMult, merchPriceFactor, homeVideoPerHead, ticketPriceRatio, eventBroadcastGuarantee, FINANCE_VARIANCE, financeForecastRanges,
+  concessionsPerHead, demandModFromRatio, goodwillDemandMult, merchPriceFactor, homeVideoPerHead, ticketPriceRatio, eventBroadcastGuarantee, televisionViewers, FINANCE_VARIANCE, financeForecastRanges,
 } from '../data/finances.js';
 import { gimmickRarity, GIMMICK_FATIGUE, isBasicMatchType } from '../data/cards.js';
 import { marketHypeForVenue, marketDemandMultiplier } from './marketHype.js';
@@ -96,6 +96,7 @@ export function projectMatch(match, context = {}) {
     position = 0,
     cardSize = 1,
     staleness = null,
+    history = [],
     staminaLookup = () => 100,
     moraleLookup = () => 65,
     titles = {},
@@ -150,6 +151,15 @@ export function projectMatch(match, context = {}) {
   const workerSpread = Math.max(...workerScores) - Math.min(...workerScores);
   const starPower = average(roster.map(w => w.popularity));
   const chemistry = averageChemistry(ids);
+  const recentParticipants = new Set(history.slice(0, 3).flatMap(show =>
+    (show.matches ?? []).flatMap(pastMatch => pastMatch.participantIds ?? []),
+  ));
+  const freshFaces = roster.filter(wrestler => wrestler.popularity <= 75 && !recentParticipants.has(wrestler.id));
+  const losingStreaks = roster.filter(wrestler => wrestler.streak?.type === 'loss' && wrestler.streak.count >= 3);
+  const freshFaceQuality = Math.min(4, freshFaces.length * 2);
+  const losingStreakQuality = Math.min(3, losingStreaks.reduce(
+    (sum, wrestler) => sum + Math.min(3, (wrestler.streak.count - 2) * 0.75), 0,
+  ));
 
   let quality = workerAvg * 0.62 + starPower * 0.18;
   const baseline = quality;
@@ -200,6 +210,10 @@ export function projectMatch(match, context = {}) {
 
   // --- momentum, stakes, presentation -------------------------------------
   add('Momentum coming in', average(roster.map(w => w.momentum)) * 2.2, 'momentum');
+  add('Fresh face spotlight', freshFaceQuality, 'freshness');
+  add('Losing streak drama', losingStreakQuality, 'story');
+  if (freshFaces.length) notes.push(`${freshFaces.map(wrestler => wrestler.name).join(', ')} ${freshFaces.length === 1 ? 'is' : 'are'} back in the spotlight after time away.`);
+  if (losingStreaks.length) notes.push(`${losingStreaks.map(wrestler => `${wrestler.name} (${wrestler.streak.count} straight losses)`).join(', ')} give the crowd a streak to watch.`);
 
   // --- morale ---------------------------------------------------------------
   const morale = average(roster.map(w => moraleLookup(w.id)));
@@ -341,16 +355,21 @@ export function projectMatch(match, context = {}) {
     notes.push(`Promo card raised match hype by ${match.promoCardEffect.matchBuzz}.`);
   }
   buzz += (starPower - 60) * 0.45;
-  if (venue) {
-    const homeDraws = roster.filter(w => homeFieldTier(w, venue));
-    homeDraws.forEach(w => {
-      const tier = homeFieldTier(w, venue);
-      buzz += tier === 'home' ? 10 : 4;
-      notes.push(`${w.name} is a ${tier === 'home' ? 'hometown' : 'regional'} draw in ${venue.city}.`);
-    });
-  }
   buzz -= stalePenalty * 0.5;
+  const freshFaceBuzz = Math.min(8, freshFaces.length * 4);
+  const losingStreakBuzz = Math.min(8, losingStreaks.reduce(
+    (sum, wrestler) => sum + Math.min(4, (wrestler.streak.count - 2) * 2), 0,
+  ));
+  buzz += freshFaceBuzz + losingStreakBuzz;
+  if (freshFaceBuzz) notes.push(`Fresh-face returns add +${freshFaceBuzz} match hype.`);
+  if (losingStreakBuzz) notes.push(`The losing-streak story adds +${losingStreakBuzz} match hype.`);
+  const baseBuzz = Math.round(clamp(buzz, -25, 120));
+  const winningStreaks = roster.filter(wrestler => wrestler.streak?.type === 'win' && wrestler.streak.count >= 2);
+  const streakBonus = Math.min(20, winningStreaks.reduce((sum, wrestler) => sum + Math.min(10, (wrestler.streak.count - 1) * 2), 0));
+  buzz += streakBonus;
   buzz = Math.round(clamp(buzz, -25, 120));
+  const winStreakBuzz = buzz - baseBuzz;
+  if (winStreakBuzz > 0) notes.push(`Winning streaks (${winningStreaks.map(wrestler => `${wrestler.name}: ${wrestler.streak.count} wins`).join(', ')}) add +${winStreakBuzz} match hype.`);
 
   // --- injury exposure -------------------------------------------------------
   let injuryRisk = type.injury * (1 + length.staminaDemand * 0.3);
@@ -385,6 +404,15 @@ export function projectMatch(match, context = {}) {
     factors: factors.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta)),
     variance,
     buzz,
+    winStreakBuzz,
+    varietyBonus: {
+      freshFaces: freshFaces.map(wrestler => wrestler.id),
+      freshFaceQuality,
+      freshFaceBuzz,
+      losingStreaks: losingStreaks.map(wrestler => ({ id: wrestler.id, count: wrestler.streak.count })),
+      losingStreakQuality,
+      losingStreakBuzz,
+    },
     injuryRisk,
     minutes,
     cost,
@@ -582,7 +610,7 @@ export function projectShow(show, options = {}) {
   const {
     history = [], bankroll = 0, staminaLookup = () => 100, moraleLookup = () => 65,
     titles = {}, showNumber = 1, gmLevel = 1, finances = { prices: {}, goodwill: 65 },
-    teams = [], leadUpLog = [], marketHype = null,
+    teams = [], leadUpLog = [], marketHype = null, tvAudience = 0,
   } = options;
 
   const venue = getVenueById(show.venueId);
@@ -600,6 +628,7 @@ export function projectShow(show, options = {}) {
       position: index,
       cardSize: show.matches.length,
       staleness: matchStaleness[index],
+      history,
       staminaLookup,
       moraleLookup,
       titles,
@@ -707,6 +736,12 @@ export function projectShow(show, options = {}) {
     0,
     100,
   );
+  const averageBuzz = cardBuzz / Math.max(matches.length, 1);
+  const tvViewers = televisionViewers(venue, rating, tvAudience, averageBuzz);
+  const tvRatingRange = {
+    low: Number((televisionViewers(venue, ratingLow, tvAudience, averageBuzz) * .92 / 960000).toFixed(1)),
+    high: Number((televisionViewers(venue, ratingHigh, tvAudience, averageBuzz) * 1.1 / 960000).toFixed(1)),
+  };
 
   // --- revenue --------------------------------------------------------------
   const prices = finances.prices;
@@ -791,6 +826,10 @@ export function projectShow(show, options = {}) {
     finances,
     cardStarPower: Math.round(cardStarPower),
     cardBuzz: Math.round(cardBuzz),
+    tvAudience,
+    tvViewers,
+    tvRating: Number((tvViewers / 960000).toFixed(1)),
+    tvRatingRange,
     rating,
     grade: gradeFor(rating),
     ratingRange: { low: ratingLow, high: ratingHigh },

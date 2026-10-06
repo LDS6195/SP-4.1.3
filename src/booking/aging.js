@@ -30,36 +30,21 @@ function peakFor(w) {
 
 function driftStats(w, phase) {
   const peak = peakFor(w);
-  const jobber = getDraftTier(w) === 'jobber';
-  const developmentChance = .35 + clamp(w.hidden?.workEthic ?? 60, 0, 100) / 400;
-  const workEthicBoost = ((w.hidden?.workEthic ?? 60) - 50) / 100; // roughly -0.5..0.5
-  PHYSICAL_STATS.forEach(stat => {
-    let delta = 0;
-    if (phase === 'rising') delta = jobber ? Number(Math.random() < developmentChance) : 1 + Math.random() * 2;
-    else if (phase === 'prime') delta = Math.random() * 2 - 1;
-    else if (phase === 'declining') delta = -(1.5 - workEthicBoost * 2) - Math.random() * 1.5;
-    else delta = -(3 - workEthicBoost * 2) - Math.random() * 3;
-    const next = Math.round(w.stats[stat] + delta);
-    // Growth stops at the peak; decline is never capped by it.
-    w.stats[stat] = clamp(delta > 0 ? Math.min(next, Math.max(peak[stat], w.stats[stat])) : next, 15, 99);
-  });
-  // Technique and charisma reflect experience, not just the body — they hold up longer.
-  const experienceDelta = phase === 'late' ? -1 : phase === 'declining' ? 0 : 1;
-  const nextTechnique = w.stats.technique + (jobber && ['rising', 'prime'].includes(phase)
-    ? Number(Math.random() < developmentChance) : experienceDelta + Math.round(Math.random()));
-  w.stats.technique = clamp(
-    nextTechnique > w.stats.technique ? Math.min(nextTechnique, Math.max(peak.technique, w.stats.technique)) : nextTechnique,
-    15,
-    99,
-  );
-  const charismaDelta = phase === 'late' ? -1 : jobber && ['rising', 'prime'].includes(phase)
-    ? Number(Math.random() < developmentChance) : Math.round(Math.random());
-  const nextCharisma = w.stats.charisma + charismaDelta;
-  w.stats.charisma = clamp(
-    charismaDelta > 0 ? Math.min(nextCharisma, Math.max(peak.charisma, w.stats.charisma)) : nextCharisma,
-    15,
-    99,
-  );
+  const workEthic = clamp(w.hidden?.workEthic ?? 60, 0, 100);
+  const growing = phase === 'rising' || (phase === 'prime' && Math.random() < .55 + workEthic * .002);
+  const breakthrough = growing && Math.random() < .03;
+  const budget = breakthrough ? 4 + Math.floor(Math.random() * 2) : 1 + Math.floor(Math.random() * 3);
+  const direction = growing ? 1 : -1;
+  const pool = growing ? ALL_STATS : PHYSICAL_STATS;
+  for (let point = 0; point < budget; point += 1) {
+    const available = pool.filter(stat => growing
+      ? w.stats[stat] < Math.min(99, Math.max(peak[stat], w.stats[stat]))
+      : w.stats[stat] > 15);
+    if (!available.length) break;
+    const stat = available[Math.floor(Math.random() * available.length)];
+    w.stats[stat] += direction;
+  }
+  return breakthrough;
 }
 
 // Mutates wrestler stats in place. Returns a summary of who climbed and who slipped so
@@ -71,10 +56,10 @@ export function runAgingPass(wrestlers, { date, isSigned }) {
     const age = calculateAge(w.dob, date);
     const phase = agePhase(age);
     const before = ALL_STATS.reduce((sum, s) => sum + w.stats[s], 0);
-    driftStats(w, phase);
+    const breakthrough = driftStats(w, phase);
     if (!isSigned(w.id)) return;
     const after = ALL_STATS.reduce((sum, s) => sum + w.stats[s], 0);
-    if (after !== before) changes.push({ id: w.id, name: w.name, age, phase, delta: after - before });
+    if (after !== before) changes.push({ id: w.id, name: w.name, age, phase, delta: after - before, breakthrough: breakthrough && after - before >= 4 });
   });
   return changes;
 }
