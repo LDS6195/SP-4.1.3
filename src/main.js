@@ -839,7 +839,7 @@ const paintingArtUrls = { rothko: rothkoUrl, dali: daliUrl, goya: goyaUrl };
 const loungeModelLoader = new GLTFLoader();
 
 function addLoungeModel(fileName, name, position, targetSize) {
-  loungeModelLoader.load(`/models/furniture-kit/Models/glb/${fileName}`, gltf => {
+  loungeModelLoader.load(`${import.meta.env.BASE_URL}models/furniture-kit/Models/glb/${fileName}`, gltf => {
     const model = gltf.scene;
     model.rotation.y = position.rotationY ?? 0;
     model.updateMatrixWorld(true);

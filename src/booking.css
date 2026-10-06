@@ -1185,6 +1185,7 @@
 .poster-headlines li { margin-bottom: 3px; }
 .poster-storylines ul { margin: 6px 0 0; padding-left: 16px; color: #cfa96a; font-size: 12px; line-height: 1.6; }
 .poster-foot { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; padding-top: 16px; border-top: 3px double #6d5a33; }
+.poster-sheet > .poster-foot { padding-right: 0; padding-left: 0; }
 .poster-foot button { padding: 12px 18px; border: 1px solid #5c564e; color: var(--paper); background: transparent; font: 600 10px 'DM Mono', monospace; letter-spacing: .1em; cursor: pointer; }
 .poster-foot button:hover { border-color: var(--gold); color: var(--gold); }
 

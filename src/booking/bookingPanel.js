@@ -346,10 +346,6 @@ function venueViewHtml() {
           : hype >= 80 ? 'AT PEAK'
             : hype >= 55 ? 'READY FOR A RETURN'
               : hype >= 30 ? 'BUILDING A FOLLOWING' : 'NEW MARKET TO GROW';
-        const cue = cooling ? 'Give the local crowd a little room before coming back.'
-          : hype >= 80 ? 'The crowd is hot. A strong card can make this a major night.'
-            : hype >= 55 ? 'Regional momentum is strong. This is a good window to return.'
-              : 'Nearby shows can warm this market before you bring the tour here.';
         const lastVisitLabel = lastVisit?.date
           ? new Date(`${lastVisit.date}T12:00:00`).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
           : 'NEVER';
@@ -358,7 +354,7 @@ function venueViewHtml() {
           ${recommended?.id === v.id && unlocked ? '<small class="venue-route-pick">RECOMMENDED TOUR STOP</small>' : ''}
           <span class="bk-option-meta">${v.name} · ${v.capacity.toLocaleString()} seats · $${v.baseTicket} tickets</span>
           <div class="venue-tour-history"><span><b>${visitCount}</b> SHOW${visitCount === 1 ? '' : 'S'} HERE</span><span>LAST STOP <b>${lastVisitLabel}</b></span></div>
-          <div class="venue-hype-meter"><div><small>CITY HYPE</small><b style="color:${tier.color}">${hype}/100 · ${timing}</b></div><span role="meter" aria-label="${v.city} hype" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${hype}"><i style="width:${hype}%;background:${tier.color}"></i></span><small>${cue}</small></div>
+          <div class="venue-hype-meter"><div><small>CITY HYPE</small><b style="color:${tier.color}">${hype}/100 · ${timing}</b></div><span role="meter" aria-label="${v.city} hype" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${hype}"><i style="width:${hype}%;background:${tier.color}"></i></span></div>
           <span class="venue-route-context">${MARKET_LOCATIONS[v.city]?.region?.toUpperCase() ?? 'INTERNATIONAL'} ROUTE · ${Math.round(v.tvReach * 100)}% LOCAL TV REACH</span>
           ${unlocked ? '' : `<small class="bk-flag">GM LEVEL ${requiredLevel} REQUIRED · YOU'RE LEVEL ${gmLevel}</small>`}
         </button>`;
