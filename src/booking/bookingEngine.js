@@ -88,6 +88,12 @@ function averageChemistry(ids) {
   return scores.length ? average(scores) : 50;
 }
 
+export function highEndRatingCurve(rating) {
+  const score = clamp(Number(rating) || 0, 0, 100);
+  if (score <= 75) return score;
+  return 75 + 25 * ((score - 75) / 25) ** 1.08;
+}
+
 export function projectMatch(match, context = {}) {
   const {
     venue = null,
@@ -327,6 +333,13 @@ export function projectMatch(match, context = {}) {
     dreamMatchCeiling = Math.max(dreamMatchCeiling, 97);
     notes.push('The Inaugural Classic — Bret Hart and Ric Flair, title on the line, in the promotion\'s first few shows. This one was always going to deliver.');
   }
+  const uncappedExpected = expected;
+  if (!isInauguralDreamMatch) {
+    expected = highEndRatingCurve(expected);
+    if (expected < uncappedExpected) {
+      factors.push({ label: 'Elite match standards', delta: Math.round((expected - uncappedExpected) * 10) / 10, kind: 'matchmaking' });
+    }
+  }
 
   const reliability = average(roster.map(w => (w.hidden?.workEthic ?? 60)));
   const riskAppetite = average(roster.map(w => (w.hidden?.riskTolerance ?? 50)));
@@ -341,8 +354,10 @@ export function projectMatch(match, context = {}) {
   if (isInauguralDreamMatch) variance = Math.min(variance, 6);
   variance = Math.round(variance);
 
-  const low = clamp(Math.round(expected - variance * 1.1), 0, 100);
-  const high = clamp(Math.round(expected + variance), 0, 100);
+  const rawLow = clamp(Math.round(uncappedExpected - variance * 1.1), 0, 100);
+  const rawHigh = clamp(Math.round(uncappedExpected + variance), 0, 100);
+  const low = Math.round(isInauguralDreamMatch ? rawLow : highEndRatingCurve(rawLow));
+  const high = Math.round(isInauguralDreamMatch ? rawHigh : highEndRatingCurve(rawHigh));
 
   // --- buzz (marquee value) -------------------------------------------------
   let buzz = type.buzz + stake.buzz;
